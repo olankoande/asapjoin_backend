@@ -1,0 +1,699 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model users {
+  id                                          BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  email                                       String                      @unique(map: "uq_users_email") @db.VarChar(255)
+  password_hash                               String                      @db.VarChar(255)
+  display_name                                String?                     @db.VarChar(120)
+  photo_url                                   String?                     @db.VarChar(1024)
+  phone_number                                String?                     @db.VarChar(50)
+  payout_email                                String?                     @db.VarChar(255)
+  payout_phone                                String?                     @db.VarChar(50)
+  bio                                         String?                     @db.VarChar(500)
+  status                                      users_status                @default(active)
+  role                                        users_role                  @default(user)
+  default_mode                                users_default_mode          @default(passenger)
+  created_at                                  DateTime                    @default(now()) @db.DateTime(0)
+  updated_at                                  DateTime                    @default(now()) @updatedAt @db.DateTime(0)
+  deleted_at                                  DateTime?                   @db.DateTime(0)
+  avatar_url                                  String?                     @db.VarChar(500)
+  email_verified                              Boolean                     @default(false)
+  first_name                                  String?                     @db.VarChar(100)
+  is_banned                                   Boolean                     @default(false)
+  last_name                                   String?                     @db.VarChar(100)
+  refresh_token                               String?                     @db.Text
+  reset_token                                 String?                     @db.VarChar(255)
+  reset_token_expiry                          DateTime?                   @db.DateTime(0)
+  admin_audit_logs                            admin_audit_logs[]
+  bookings                                    bookings[]
+  conversation_participants                   conversation_participants[]
+  deliveries_received                         deliveries[]                @relation("recipient")
+  deliveries_sent                             deliveries[]                @relation("sender")
+  messages                                    messages[]
+  payments_payments_payee_idTousers           payments[]                  @relation("payments_payee_idTousers")
+  payments                                    payments[]
+  payouts                                     payouts[]
+  reports_filed                               reports[]                   @relation("reporter")
+  reports_reports_resolved_by_admin_idTousers reports[]                   @relation("reports_resolved_by_admin_idTousers")
+  reviews_reviews_author_idTousers            reviews[]                   @relation("reviews_author_idTousers")
+  reviews_reviews_target_user_idTousers       reviews[]                   @relation("reviews_target_user_idTousers")
+  settings                                    settings[]
+  trips_as_driver                             trips[]
+  vehicles                                    vehicles[]
+  wallet                                      wallets?
+}
+
+model vehicles {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id     BigInt    @db.UnsignedBigInt
+  make        String    @db.VarChar(80)
+  model       String    @db.VarChar(80)
+  year        Int?      @db.UnsignedSmallInt
+  color       String?   @db.VarChar(40)
+  plate       String?   @db.VarChar(40)
+  seats_count Int       @default(4) @db.UnsignedTinyInt
+  has_ac      Boolean   @default(false)
+  notes       String?   @db.VarChar(255)
+  created_at  DateTime  @default(now()) @db.DateTime(0)
+  updated_at  DateTime  @default(now()) @updatedAt @db.DateTime(0)
+  deleted_at  DateTime? @db.DateTime(0)
+  trips       trips[]
+  user        users     @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_vehicles_user")
+
+  @@index([user_id], map: "idx_vehicles_user")
+}
+
+model trips {
+  id                      BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  driver_id               BigInt                   @db.UnsignedBigInt
+  vehicle_id              BigInt                   @db.UnsignedBigInt
+  from_city               String                   @db.VarChar(120)
+  to_city                 String                   @db.VarChar(120)
+  from_address            String?                  @db.VarChar(255)
+  to_address              String?                  @db.VarChar(255)
+  departure_at            DateTime                 @db.DateTime(0)
+  price_per_seat          Decimal                  @default(0.00) @db.Decimal(12, 2)
+  currency                String                   @default("CAD") @db.Char(3)
+  seats_total             Int                      @db.UnsignedTinyInt
+  seats_available         Int                      @db.UnsignedTinyInt
+  booking_mode            trips_booking_mode       @default(manual)
+  status                  trips_status             @default(draft)
+  rules_json              String?                  @db.Text
+  accepts_parcels         Boolean                  @default(false)
+  parcel_max_size         trips_parcel_max_size?
+  parcel_max_weight_kg    Decimal?                 @db.Decimal(8, 2)
+  parcel_prohibited_items String?                  @db.VarChar(500)
+  parcel_price_mode       trips_parcel_price_mode?
+  parcel_base_price       Decimal?                 @db.Decimal(12, 2)
+  created_at              DateTime                 @default(now()) @db.DateTime(0)
+  updated_at              DateTime                 @default(now()) @updatedAt @db.DateTime(0)
+  deleted_at              DateTime?                @db.DateTime(0)
+  delivery_mode           trips_delivery_mode      @default(manual)
+  bookings                bookings[]
+  deliveries              deliveries[]
+  stops                   trip_stops[]
+  driver                  users                    @relation(fields: [driver_id], references: [id], onUpdate: Restrict, map: "fk_trips_driver")
+  vehicle                 vehicles                 @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "fk_trips_vehicle")
+
+  @@index([vehicle_id], map: "fk_trips_vehicle")
+  @@index([accepts_parcels, departure_at], map: "idx_trips_accepts_parcels")
+  @@index([driver_id], map: "idx_trips_driver")
+  @@index([status, departure_at], map: "idx_trips_published")
+  @@index([from_city, to_city, departure_at], map: "idx_trips_search")
+  @@index([delivery_mode], map: "idx_trips_delivery_mode")
+}
+
+model trip_stops {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  trip_id    BigInt    @db.UnsignedBigInt
+  stop_order Int
+  city       String    @db.VarChar(120)
+  address    String?   @db.VarChar(255)
+  eta_at     DateTime? @db.DateTime(0)
+  created_at DateTime  @default(now()) @db.DateTime(0)
+  updated_at DateTime  @default(now()) @db.DateTime(0)
+  deleted_at DateTime? @db.DateTime(0)
+  trip       trips     @relation(fields: [trip_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_trip_stops_trip")
+
+  @@unique([trip_id, stop_order], map: "uq_trip_stop_order")
+  @@index([trip_id], map: "idx_trip_stops_trip")
+}
+
+model bookings {
+  id                     BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  trip_id                BigInt          @db.UnsignedBigInt
+  passenger_id           BigInt          @db.UnsignedBigInt
+  seats_requested        Int             @default(1) @db.UnsignedTinyInt
+  status                 bookings_status @default(pending)
+  cancel_reason          String?         @db.VarChar(255)
+  amount_total           Decimal?        @db.Decimal(12, 2)
+  currency               String          @default("CAD") @db.Char(3)
+  cancellation_policy_id BigInt?         @db.UnsignedBigInt
+  cancellation_rule_id   BigInt?         @db.UnsignedBigInt
+  created_at             DateTime        @default(now()) @db.DateTime(0)
+  updated_at             DateTime        @default(now()) @updatedAt @db.DateTime(0)
+  deleted_at             DateTime?       @db.DateTime(0)
+  passenger              users           @relation(fields: [passenger_id], references: [id], onUpdate: Restrict, map: "fk_bookings_passenger")
+  trip                   trips           @relation(fields: [trip_id], references: [id], onUpdate: Restrict, map: "fk_bookings_trip")
+  conversations          conversations?
+  payments               payments[]
+  reviews                reviews[]
+
+  @@index([passenger_id, created_at], map: "idx_bookings_passenger")
+  @@index([status, created_at], map: "idx_bookings_status")
+  @@index([trip_id, status], map: "idx_bookings_trip")
+}
+
+model deliveries {
+  id                     BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  trip_id                BigInt            @db.UnsignedBigInt
+  sender_id              BigInt            @db.UnsignedBigInt
+  recipient_user_id      BigInt?           @db.UnsignedBigInt
+  parcel_id              BigInt            @db.UnsignedBigInt
+  pickup_notes           String?           @db.VarChar(500)
+  dropoff_notes          String?           @db.VarChar(500)
+  status                 deliveries_status @default(pending)
+  cancel_reason          String?           @db.VarChar(255)
+  received_at            DateTime?         @db.DateTime(0)
+  delivery_code          String?           @db.VarChar(20)
+  amount_total           Decimal?          @db.Decimal(12, 2)
+  currency               String            @default("CAD") @db.Char(3)
+  cancellation_policy_id BigInt?           @db.UnsignedBigInt
+  cancellation_rule_id   BigInt?           @db.UnsignedBigInt
+  created_at             DateTime          @default(now()) @db.DateTime(0)
+  updated_at             DateTime          @default(now()) @updatedAt @db.DateTime(0)
+  deleted_at             DateTime?         @db.DateTime(0)
+  accepted_at            DateTime?         @db.DateTime(0)
+  in_transit_at          DateTime?         @db.DateTime(0)
+  delivered_at           DateTime?         @db.DateTime(0)
+  conversations          conversations?
+  parcels                parcels           @relation(fields: [parcel_id], references: [id], onUpdate: Restrict, map: "fk_deliveries_parcel")
+  recipient              users?            @relation("recipient", fields: [recipient_user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_deliveries_recipient")
+  sender                 users             @relation("sender", fields: [sender_id], references: [id], onUpdate: Restrict, map: "fk_deliveries_sender")
+  trip                   trips             @relation(fields: [trip_id], references: [id], onUpdate: Restrict, map: "fk_deliveries_trip")
+  payments               payments[]
+  reviews                reviews[]
+
+  @@index([parcel_id], map: "fk_deliveries_parcel")
+  @@index([recipient_user_id, status, created_at], map: "idx_deliveries_recipient")
+  @@index([sender_id, created_at], map: "idx_deliveries_sender")
+  @@index([status, created_at], map: "idx_deliveries_status")
+  @@index([trip_id, status], map: "idx_deliveries_trip")
+}
+
+model parcels {
+  id             BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  size_category  parcels_size_category
+  weight_kg      Decimal?              @db.Decimal(8, 2)
+  declared_value Decimal?              @db.Decimal(12, 2)
+  currency       String                @default("CAD") @db.Char(3)
+  instructions   String?               @db.VarChar(500)
+  photos_json    String?               @db.Text
+  created_at     DateTime              @default(now()) @db.DateTime(0)
+  updated_at     DateTime              @default(now()) @db.DateTime(0)
+  deleted_at     DateTime?             @db.DateTime(0)
+  deliveries     deliveries[]
+}
+
+model payments {
+  id                             BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  booking_id                     BigInt?           @db.UnsignedBigInt
+  delivery_id                    BigInt?           @db.UnsignedBigInt
+  payer_id                       BigInt            @db.UnsignedBigInt
+  payee_id                       BigInt            @db.UnsignedBigInt
+  amount                         Decimal           @db.Decimal(12, 2)
+  currency                       String            @default("CAD") @db.Char(3)
+  provider                       payments_provider @default(stripe)
+  status                         payments_status   @default(requires_payment)
+  stripe_payment_intent_id       String?           @unique(map: "uq_payments_stripe_intent") @db.VarChar(255)
+  stripe_charge_id               String?           @db.VarChar(255)
+  created_at                     DateTime          @default(now()) @db.DateTime(0)
+  updated_at                     DateTime          @default(now()) @updatedAt @db.DateTime(0)
+  booking                        bookings?         @relation(fields: [booking_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_payments_booking")
+  delivery                       deliveries?       @relation(fields: [delivery_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_payments_delivery")
+  users_payments_payee_idTousers users             @relation("payments_payee_idTousers", fields: [payee_id], references: [id], onUpdate: Restrict, map: "fk_payments_payee")
+  payer                          users             @relation(fields: [payer_id], references: [id], onUpdate: Restrict, map: "fk_payments_payer")
+  refunds                        refunds[]
+
+  @@index([payee_id], map: "fk_payments_payee")
+  @@index([payer_id], map: "fk_payments_payer")
+  @@index([booking_id], map: "idx_payments_booking")
+  @@index([delivery_id], map: "idx_payments_delivery")
+  @@index([status, created_at], map: "idx_payments_status")
+}
+
+model refunds {
+  id               BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  payment_id       BigInt         @db.UnsignedBigInt
+  amount           Decimal        @db.Decimal(12, 2)
+  currency         String         @default("CAD") @db.Char(3)
+  status           refunds_status @default(pending)
+  reason           String?        @db.VarChar(255)
+  stripe_refund_id String?        @unique(map: "uq_refunds_stripe") @db.VarChar(255)
+  created_at       DateTime       @default(now()) @db.DateTime(0)
+  updated_at       DateTime       @default(now()) @db.DateTime(0)
+  payment          payments       @relation(fields: [payment_id], references: [id], onUpdate: Restrict, map: "fk_refunds_payment")
+
+  @@index([payment_id], map: "idx_refunds_payment")
+  @@index([status, created_at], map: "idx_refunds_status")
+}
+
+model wallets {
+  id                BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id           BigInt                @unique(map: "uq_wallets_user") @db.UnsignedBigInt
+  currency          String                @default("CAD") @db.Char(3)
+  pending_balance   Decimal               @default(0.00) @db.Decimal(12, 2)
+  available_balance Decimal               @default(0.00) @db.Decimal(12, 2)
+  status            wallets_status        @default(active)
+  created_at        DateTime              @default(now()) @db.DateTime(0)
+  updated_at        DateTime              @default(now()) @updatedAt @db.DateTime(0)
+  transactions      wallet_transactions[]
+  user              users                 @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_wallets_user")
+
+  @@index([user_id], map: "idx_wallets_user")
+}
+
+model wallet_transactions {
+  id             BigInt                             @id @default(autoincrement()) @db.UnsignedBigInt
+  wallet_id      BigInt                             @db.UnsignedBigInt
+  type           String                             @db.VarChar(40)
+  amount         Decimal                            @db.Decimal(12, 2)
+  currency       String                             @default("CAD") @db.Char(3)
+  reason_code    String?                            @db.VarChar(80)
+  reference_type wallet_transactions_reference_type
+  reference_id   BigInt?                            @db.UnsignedBigInt
+  balance_bucket wallet_transactions_balance_bucket @default(pending)
+  created_at     DateTime                           @default(now()) @db.DateTime(0)
+  wallet         wallets                            @relation(fields: [wallet_id], references: [id], onUpdate: Restrict, map: "fk_wallet_transactions_wallet")
+
+  @@index([reference_type, reference_id], map: "idx_wallet_tx_reference")
+  @@index([wallet_id, created_at], map: "idx_wallet_tx_wallet")
+}
+
+model payout_batches {
+  id                  BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  scheduled_for_date  DateTime              @db.Date
+  status              payout_batches_status @default(draft)
+  created_by_admin_id BigInt?               @db.UnsignedBigInt
+  created_at          DateTime              @default(now()) @db.DateTime(0)
+  updated_at          DateTime              @default(now()) @updatedAt @db.DateTime(0)
+  payouts             payouts[]
+
+  @@index([scheduled_for_date, status], map: "idx_payout_batches_date")
+}
+
+model payouts {
+  id             BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  batch_id       BigInt                @db.UnsignedBigInt
+  user_id        BigInt                @db.UnsignedBigInt
+  amount         Decimal               @db.Decimal(12, 2)
+  currency       String                @default("CAD") @db.Char(3)
+  status         payouts_status        @default(queued)
+  payout_method  payouts_payout_method @default(manual)
+  destination    String?               @db.VarChar(255)
+  failure_reason String?               @db.VarChar(255)
+  created_at     DateTime              @default(now()) @db.DateTime(0)
+  updated_at     DateTime              @default(now()) @updatedAt @db.DateTime(0)
+  batch          payout_batches        @relation(fields: [batch_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_payouts_batch")
+  users          users                 @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_payouts_user")
+
+  @@index([batch_id], map: "idx_payouts_batch")
+  @@index([status, created_at], map: "idx_payouts_status")
+  @@index([user_id, created_at], map: "idx_payouts_user")
+}
+
+model cancellation_policies {
+  id                  BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  name                String                      @db.VarChar(120)
+  scope               cancellation_policies_scope
+  active              Boolean                     @default(false)
+  created_by_admin_id BigInt?                     @db.UnsignedBigInt
+  updated_by_admin_id BigInt?                     @db.UnsignedBigInt
+  created_at          DateTime                    @default(now()) @db.DateTime(0)
+  updated_at          DateTime                    @default(now()) @updatedAt @db.DateTime(0)
+  rules               cancellation_policy_rules[]
+
+  @@index([scope, active], map: "idx_cancellation_policies_scope_active")
+}
+
+model cancellation_policy_rules {
+  id                          BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  policy_id                   BigInt                @db.UnsignedBigInt
+  min_hours_before_departure  Int
+  cancellation_fee_fixed      Decimal               @default(0.00) @db.Decimal(12, 2)
+  cancellation_fee_percent    Decimal               @default(0.00) @db.Decimal(5, 2)
+  refund_percent_to_payer     Decimal               @default(100.00) @db.Decimal(5, 2)
+  debit_driver_percent        Decimal               @default(0.00) @db.Decimal(5, 2)
+  apply_after_min_delay_hours Int                   @default(0)
+  created_at                  DateTime              @default(now()) @db.DateTime(0)
+  updated_at                  DateTime              @default(now()) @db.DateTime(0)
+  policy                      cancellation_policies @relation(fields: [policy_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_policy_rules_policy")
+
+  @@index([policy_id], map: "idx_policy_rules_policy")
+  @@index([policy_id, min_hours_before_departure], map: "idx_policy_rules_window")
+}
+
+model stripe_events {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  stripe_event_id String   @unique(map: "uq_stripe_events_event") @db.VarChar(255)
+  type            String   @db.VarChar(255)
+  processed_at    DateTime @default(now()) @db.DateTime(0)
+  payload_json    String?  @db.LongText
+
+  @@index([type, processed_at], map: "idx_stripe_events_type")
+}
+
+model admin_audit_logs {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  admin_id     BigInt   @db.UnsignedBigInt
+  action       String   @db.VarChar(80)
+  entity_type  String   @db.VarChar(40)
+  entity_id    BigInt?  @db.UnsignedBigInt
+  details_json String?  @db.LongText
+  created_at   DateTime @default(now()) @db.DateTime(0)
+  admin        users    @relation(fields: [admin_id], references: [id], onUpdate: Restrict, map: "fk_admin_audit_logs_admin")
+
+  @@index([admin_id, created_at], map: "idx_admin_audit_logs_admin")
+  @@index([entity_type, entity_id], map: "idx_admin_audit_logs_entity")
+}
+
+model conversations {
+  id                        BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  type                      conversations_type          @default(booking)
+  booking_id                BigInt?                     @unique(map: "uq_conversation_booking") @db.UnsignedBigInt
+  delivery_id               BigInt?                     @unique(map: "uq_conversation_delivery") @db.UnsignedBigInt
+  status                    conversations_status        @default(open)
+  created_by                BigInt?                     @db.UnsignedBigInt
+  last_message_at           DateTime?                   @db.DateTime(0)
+  created_at                DateTime                    @default(now()) @db.DateTime(0)
+  updated_at                DateTime                    @default(now()) @db.DateTime(0)
+  conversation_participants conversation_participants[]
+  booking                   bookings?                   @relation(fields: [booking_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_conversations_booking")
+  delivery                  deliveries?                 @relation(fields: [delivery_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_conversations_delivery")
+  messages                  messages[]
+}
+
+model messages {
+  id              BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  conversation_id BigInt                @db.UnsignedBigInt
+  sender_id       BigInt?               @db.UnsignedBigInt
+  message_type    messages_message_type @default(text)
+  message_text    String                @db.Text
+  created_at      DateTime              @default(now()) @db.DateTime(0)
+  deleted_at      DateTime?             @db.DateTime(0)
+  conversation    conversations         @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_messages_conversation")
+  sender          users?                @relation(fields: [sender_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_messages_sender")
+
+  @@index([conversation_id, created_at], map: "idx_messages_conversation")
+  @@index([sender_id, created_at], map: "idx_messages_sender")
+}
+
+model reviews {
+  id                                  BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  author_id                           BigInt      @db.UnsignedBigInt
+  target_user_id                      BigInt      @db.UnsignedBigInt
+  booking_id                          BigInt?     @db.UnsignedBigInt
+  delivery_id                         BigInt?     @db.UnsignedBigInt
+  rating                              Int         @db.UnsignedTinyInt
+  comment                             String?     @db.VarChar(1000)
+  created_at                          DateTime    @default(now()) @db.DateTime(0)
+  users_reviews_author_idTousers      users       @relation("reviews_author_idTousers", fields: [author_id], references: [id], onUpdate: Restrict, map: "fk_reviews_author")
+  bookings                            bookings?   @relation(fields: [booking_id], references: [id], onUpdate: Restrict, map: "fk_reviews_booking")
+  deliveries                          deliveries? @relation(fields: [delivery_id], references: [id], onUpdate: Restrict, map: "fk_reviews_delivery")
+  users_reviews_target_user_idTousers users       @relation("reviews_target_user_idTousers", fields: [target_user_id], references: [id], onUpdate: Restrict, map: "fk_reviews_target")
+
+  @@index([booking_id], map: "fk_reviews_booking")
+  @@index([delivery_id], map: "fk_reviews_delivery")
+  @@index([author_id, created_at], map: "idx_reviews_author")
+  @@index([target_user_id, created_at], map: "idx_reviews_target")
+}
+
+model reports {
+  id                                        BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  reporter_id                               BigInt              @db.UnsignedBigInt
+  target_type                               reports_target_type
+  target_id                                 BigInt              @db.UnsignedBigInt
+  reason                                    String              @db.VarChar(255)
+  details                                   String?             @db.VarChar(1000)
+  status                                    reports_status      @default(open)
+  resolved_by_admin_id                      BigInt?             @db.UnsignedBigInt
+  resolved_at                               DateTime?           @db.DateTime(0)
+  created_at                                DateTime            @default(now()) @db.DateTime(0)
+  reporter                                  users               @relation("reporter", fields: [reporter_id], references: [id], onUpdate: Restrict, map: "fk_reports_reporter")
+  users_reports_resolved_by_admin_idTousers users?              @relation("reports_resolved_by_admin_idTousers", fields: [resolved_by_admin_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_reports_resolver")
+
+  @@index([reporter_id], map: "fk_reports_reporter")
+  @@index([resolved_by_admin_id], map: "fk_reports_resolver")
+  @@index([status, created_at], map: "idx_reports_status")
+  @@index([target_type, target_id], map: "idx_reports_target")
+}
+
+model settings {
+  id                  BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  setting_key         String   @unique(map: "uq_settings_key") @db.VarChar(80)
+  setting_value       String   @db.VarChar(255)
+  updated_by_admin_id BigInt?  @db.UnsignedBigInt
+  updated_at          DateTime @default(now()) @db.DateTime(0)
+  users               users?   @relation(fields: [updated_by_admin_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_settings_admin")
+
+  @@index([updated_by_admin_id], map: "fk_settings_admin")
+}
+
+model platform_settings {
+  id                                      Int      @id @default(autoincrement()) @db.UnsignedInt
+  deliveries_min_hours_before_departure   Int      @default(2)
+  deliveries_min_minutes_before_departure Int      @default(0)
+  created_at                              DateTime @default(now()) @db.DateTime(0)
+  updated_at                              DateTime @default(now()) @updatedAt @db.DateTime(0)
+}
+
+model conversation_participants {
+  id              BigInt                         @id @default(autoincrement()) @db.UnsignedBigInt
+  conversation_id BigInt                         @db.UnsignedBigInt
+  user_id         BigInt                         @db.UnsignedBigInt
+  role            conversation_participants_role @default(passenger)
+  last_read_at    DateTime?                      @db.DateTime(0)
+  created_at      DateTime                       @default(now()) @db.DateTime(0)
+  conversations   conversations                  @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_cp_conversation")
+  users           users                          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_cp_user")
+
+  @@unique([conversation_id, user_id], map: "uq_cp_conv_user")
+  @@index([conversation_id], map: "idx_cp_conversation")
+  @@index([user_id], map: "idx_cp_user")
+}
+
+enum parcels_size_category {
+  XS
+  S
+  M
+  L
+}
+
+enum cancellation_policies_scope {
+  booking
+  delivery
+}
+
+enum payout_batches_status {
+  draft
+  ready
+  processing
+  paid
+  failed
+  cancelled
+}
+
+enum reports_target_type {
+  user
+  trip
+  booking
+  delivery
+  message
+  review
+}
+
+enum bookings_status {
+  pending
+  accepted
+  rejected
+  paid
+  cancelled
+  completed
+  expired
+  disputed
+}
+
+enum refunds_status {
+  pending
+  succeeded
+  failed
+}
+
+enum payouts_status {
+  queued
+  sent
+  paid
+  failed
+}
+
+enum wallets_status {
+  active
+  blocked
+}
+
+enum deliveries_status {
+  pending
+  accepted
+  rejected
+  paid
+  in_transit
+  delivered
+  cancelled
+  disputed
+  received
+}
+
+enum payouts_payout_method {
+  manual
+  stripe_connect
+}
+
+enum reports_status {
+  open
+  resolved
+  rejected
+}
+
+enum wallet_transactions_direction {
+  credit
+  debit
+}
+
+enum wallet_transactions_status {
+  pending
+  posted
+  reversed
+}
+
+enum wallet_transactions_reference_type {
+  booking
+  delivery
+  refund
+  payout
+  adjustment
+  payment
+  payout_batch
+  dispute
+  system
+}
+
+enum payments_provider {
+  stripe
+}
+
+enum payments_status {
+  requires_payment
+  processing
+  succeeded
+  failed
+  refunded
+  cancelled
+}
+
+enum users_status {
+  active
+  inactive
+  banned
+}
+
+enum wallet_transactions_balance_bucket {
+  pending
+  available
+}
+
+enum users_role {
+  user
+  support
+  admin
+}
+
+enum trips_booking_mode {
+  instant
+  manual
+}
+
+enum trips_delivery_mode {
+  manual
+  instant
+}
+
+enum trips_status {
+  draft
+  published
+  unpublished
+  cancelled
+  completed
+}
+
+enum trips_parcel_max_size {
+  XS
+  S
+  M
+  L
+}
+
+enum trips_parcel_price_mode {
+  fixed
+  by_size
+  by_distance
+}
+
+enum conversations_type {
+  booking
+  delivery
+}
+
+enum conversation_participants_role {
+  driver
+  passenger
+  sender
+  recipient
+  admin_viewer
+}
+
+enum messages_message_type {
+  text
+  system
+}
+
+enum conversations_status {
+  open
+  closed
+  archived
+}
+
+enum users_default_mode {
+  passenger
+  driver
+  sender
+}
+
+model refund_policies {
+  id                              BigInt                        @id @default(autoincrement()) @db.UnsignedBigInt
+  resource_type                   refund_policies_resource_type
+  actor_role                      refund_policies_actor_role
+  name                            String                        @db.VarChar(120)
+  active                          Boolean                       @default(true)
+  min_hours_before_departure      Int                           @default(0) @db.UnsignedSmallInt
+  refund_request_deadline_hours   Int                           @default(0) @db.UnsignedSmallInt
+  cancellation_fee_fixed_cents    Int                           @default(0) @db.UnsignedInt
+  cancellation_fee_percent        Decimal                       @default(0) @db.Decimal(5, 2)
+  refund_percent_to_customer      Decimal                       @default(100) @db.Decimal(5, 2)
+  driver_compensation_percent     Decimal                       @default(0) @db.Decimal(5, 2)
+  applies_when_statuses           String                        @db.VarChar(255)
+  priority                        Int                           @default(0) @db.SmallInt
+  notes                           String?                       @db.Text
+  created_at                      DateTime                      @default(now()) @db.DateTime(0)
+  updated_at                      DateTime                      @default(now()) @updatedAt @db.DateTime(0)
+
+  @@index([resource_type, actor_role, active], map: "idx_refund_policies_lookup")
+}
+
+enum refund_policies_resource_type {
+  booking
+  delivery
+}
+
+enum refund_policies_actor_role {
+  passenger
+  sender
+  driver
+  admin
+}
