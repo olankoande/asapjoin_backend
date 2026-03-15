@@ -1,0 +1,1858 @@
+openapi: 3.0.3
+info:
+  title: AsapJoin Carpool Platform API
+  description: |
+    API REST complète pour la plateforme de covoiturage AsapJoin.
+    Gère les trajets, réservations, livraisons de colis, paiements Stripe,
+    wallet interne, politiques d'annulation, payouts et messagerie.
+  version: 1.0.0
+  contact:
+    name: AsapJoin Team
+
+servers:
+  - url: http://localhost:3000
+    description: Development
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Invalid input
+        traceId:
+          type: string
+          format: uuid
+        details:
+          type: array
+          items:
+            type: object
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone_number:
+          type: string
+        avatar_url:
+          type: string
+        role:
+          type: string
+          enum: [user, support, admin]
+        is_banned:
+          type: boolean
+        payout_email:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        brand:
+          type: string
+        model:
+          type: string
+        color:
+          type: string
+        plate_number:
+          type: string
+        year:
+          type: integer
+        seats:
+          type: integer
+        photo_url:
+          type: string
+
+    Trip:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        driver_id:
+          type: string
+          format: uuid
+        vehicle_id:
+          type: string
+          format: uuid
+        origin_address:
+          type: string
+        origin_lat:
+          type: number
+        origin_lng:
+          type: number
+        destination_address:
+          type: string
+        destination_lat:
+          type: number
+        destination_lng:
+          type: number
+        departure_time:
+          type: string
+          format: date-time
+        estimated_arrival:
+          type: string
+          format: date-time
+        available_seats:
+          type: integer
+        price_per_seat:
+          type: number
+        accepts_parcels:
+          type: boolean
+        parcel_price:
+          type: number
+        delivery_mode:
+          type: string
+          enum: [manual, instant]
+          default: manual
+        status:
+          type: string
+          enum: [draft, published, in_progress, completed, cancelled]
+        notes:
+          type: string
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trip_id:
+          type: string
+          format: uuid
+        passenger_id:
+          type: string
+          format: uuid
+        seats_booked:
+          type: integer
+        total_price:
+          type: number
+        status:
+          type: string
+          enum: [pending, accepted, rejected, cancelled, completed]
+        cancelled_by:
+          type: string
+        cancellation_reason:
+          type: string
+
+    Delivery:
+      type: object
+      properties:
+        id:
+          type: string
+        trip_id:
+          type: string
+        sender_id:
+          type: string
+        recipient_user_id:
+          type: string
+          nullable: true
+        parcel_id:
+          type: string
+        amount_total:
+          type: number
+          nullable: true
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, rejected, paid, in_transit, delivered, received, cancelled, disputed]
+        pickup_notes:
+          type: string
+          nullable: true
+        dropoff_notes:
+          type: string
+          nullable: true
+        delivery_code:
+          type: string
+          nullable: true
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        in_transit_at:
+          type: string
+          format: date-time
+          nullable: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        received_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        trip:
+          $ref: '#/components/schemas/Trip'
+        sender:
+          $ref: '#/components/schemas/User'
+        recipient:
+          $ref: '#/components/schemas/User'
+        parcels:
+          $ref: '#/components/schemas/Parcel'
+
+    Parcel:
+      type: object
+      properties:
+        id:
+          type: string
+        size_category:
+          type: string
+          enum: [XS, S, M, L]
+        weight_kg:
+          type: number
+          nullable: true
+        declared_value:
+          type: number
+          nullable: true
+        instructions:
+          type: string
+          nullable: true
+
+    PlatformSettings:
+      type: object
+      properties:
+        deliveries_min_hours_before_departure:
+          type: integer
+          minimum: 0
+        deliveries_min_minutes_before_departure:
+          type: integer
+          minimum: 0
+          maximum: 59
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        payer_id:
+          type: string
+          format: uuid
+        booking_id:
+          type: string
+          format: uuid
+        delivery_id:
+          type: string
+          format: uuid
+        stripe_payment_intent:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [pending, succeeded, failed, refunded]
+
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        pending_balance:
+          type: number
+        available_balance:
+          type: number
+        currency:
+          type: string
+
+    WalletTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        wallet_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        amount:
+          type: number
+        balance_after:
+          type: number
+        reference_id:
+          type: string
+        reference_type:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CancellationPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        is_active:
+          type: boolean
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/CancellationPolicyRule'
+
+    CancellationPolicyRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        min_hours_before_departure:
+          type: number
+        max_hours_before_departure:
+          type: number
+        fixed_fee:
+          type: number
+        percentage_fee:
+          type: number
+        refund_percentage:
+          type: number
+        apply_after_min_delay_hours:
+          type: number
+
+    PayoutBatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        total_amount:
+          type: number
+        total_count:
+          type: integer
+        created_by:
+          type: string
+          format: uuid
+        executed_at:
+          type: string
+          format: date-time
+
+    Payout:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        payout_email:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        reviewer_id:
+          type: string
+          format: uuid
+        reviewee_id:
+          type: string
+          format: uuid
+        trip_id:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    # ─── Cancellation & Refund Schemas ───
+
+    CancelPreview:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: Whether cancellation is allowed
+        policy_id:
+          type: string
+          nullable: true
+        policy_name:
+          type: string
+          nullable: true
+        refund_amount_cents:
+          type: integer
+          description: Amount to refund to customer (in cents)
+        cancellation_fee_cents:
+          type: integer
+          description: Cancellation fee retained (in cents)
+        driver_reversal_cents:
+          type: integer
+          description: Amount reversed from driver wallet (in cents)
+        driver_compensation_cents:
+          type: integer
+          description: Compensation to driver for late cancellation (in cents)
+        original_amount_cents:
+          type: integer
+          description: Original gross payment amount (in cents)
+        message:
+          type: string
+          description: Human-readable message
+        reason_code:
+          type: string
+          nullable: true
+          description: Machine-readable reason code
+          enum: [CANCELLATION_NOT_ALLOWED, INVALID_REFUND_POLICY, REFUND_REQUEST_WINDOW_EXPIRED]
+
+    CancelResult:
+      type: object
+      properties:
+        cancellation_request_id:
+          type: string
+        status:
+          type: string
+          enum: [approved, refunded]
+        refund_amount_cents:
+          type: integer
+        cancellation_fee_cents:
+          type: integer
+        stripe_refund_id:
+          type: string
+          nullable: true
+        message:
+          type: string
+
+    RefundPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+        resource_type:
+          type: string
+          enum: [booking, delivery]
+        actor_role:
+          type: string
+          enum: [passenger, sender, driver, admin]
+        name:
+          type: string
+        active:
+          type: boolean
+        min_hours_before_departure:
+          type: integer
+          description: Minimum hours before departure to allow cancellation
+        refund_request_deadline_hours:
+          type: integer
+          description: Max hours after event to request refund (0 = no deadline)
+        cancellation_fee_fixed_cents:
+          type: integer
+        cancellation_fee_percent:
+          type: number
+          format: decimal
+        refund_percent_to_customer:
+          type: number
+          format: decimal
+        driver_compensation_percent:
+          type: number
+          format: decimal
+        applies_when_statuses:
+          type: string
+          description: CSV of statuses where this policy applies
+        priority:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RefundPolicyInput:
+      type: object
+      required: [resource_type, actor_role, name, applies_when_statuses]
+      properties:
+        resource_type:
+          type: string
+          enum: [booking, delivery]
+        actor_role:
+          type: string
+          enum: [passenger, sender, driver, admin]
+        name:
+          type: string
+        min_hours_before_departure:
+          type: integer
+          default: 0
+        refund_request_deadline_hours:
+          type: integer
+          default: 0
+        cancellation_fee_fixed_cents:
+          type: integer
+          default: 0
+        cancellation_fee_percent:
+          type: number
+          default: 0
+        refund_percent_to_customer:
+          type: number
+          default: 100
+        driver_compensation_percent:
+          type: number
+          default: 0
+        applies_when_statuses:
+          type: string
+          description: CSV of statuses (e.g. "pending,accepted,paid")
+        priority:
+          type: integer
+          default: 0
+        notes:
+          type: string
+
+    CancellationRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        resource_type:
+          type: string
+          enum: [booking, delivery]
+        resource_id:
+          type: string
+        actor_user_id:
+          type: string
+        actor_role:
+          type: string
+          enum: [passenger, sender, driver, admin]
+        reason:
+          type: string
+          nullable: true
+        original_amount_cents:
+          type: integer
+        calculated_refund_cents:
+          type: integer
+        calculated_fee_cents:
+          type: integer
+        driver_reversal_cents:
+          type: integer
+        commission_reversal_cents:
+          type: integer
+        driver_compensation_cents:
+          type: integer
+        policy_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [requested, approved, rejected, refunded, closed]
+        stripe_refund_id:
+          type: string
+          nullable: true
+        refund_id:
+          type: string
+          nullable: true
+        is_admin_override:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+paths:
+  # ─── Auth ───
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, first_name, last_name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                phone_number:
+                  type: string
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/User'
+                  - $ref: '#/components/schemas/TokenPair'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New token pair
+
+  /api/v1/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request password reset email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Reset email sent (always 200)
+
+  /api/v1/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password with token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password reset successful
+
+  # ─── Users ───
+  /api/v1/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    patch:
+      tags: [Users]
+      summary: Update current user profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                phone_number:
+                  type: string
+                avatar_url:
+                  type: string
+                payout_email:
+                  type: string
+      responses:
+        '200':
+          description: Updated profile
+
+  # ─── Vehicles ───
+  /api/v1/vehicles:
+    get:
+      tags: [Vehicles]
+      summary: List my vehicles
+      responses:
+        '200':
+          description: List of vehicles
+    post:
+      tags: [Vehicles]
+      summary: Create a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [brand, model, color, plate_number, year]
+              properties:
+                brand:
+                  type: string
+                model:
+                  type: string
+                color:
+                  type: string
+                plate_number:
+                  type: string
+                year:
+                  type: integer
+                seats:
+                  type: integer
+                  default: 4
+      responses:
+        '201':
+          description: Vehicle created
+
+  /api/v1/vehicles/{id}:
+    patch:
+      tags: [Vehicles]
+      summary: Update a vehicle
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Vehicle updated
+    delete:
+      tags: [Vehicles]
+      summary: Delete a vehicle
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Vehicle deleted
+
+  # ─── Trips ───
+  /api/v1/trips:
+    post:
+      tags: [Trips]
+      summary: Create a trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicle_id, origin_address, origin_lat, origin_lng, destination_address, destination_lat, destination_lng, departure_time, available_seats, price_per_seat]
+              properties:
+                vehicle_id:
+                  type: string
+                  format: uuid
+                origin_address:
+                  type: string
+                origin_lat:
+                  type: number
+                origin_lng:
+                  type: number
+                destination_address:
+                  type: string
+                destination_lat:
+                  type: number
+                destination_lng:
+                  type: number
+                departure_time:
+                  type: string
+                  format: date-time
+                available_seats:
+                  type: integer
+                price_per_seat:
+                  type: number
+                accepts_parcels:
+                  type: boolean
+                parcel_price:
+                  type: number
+      responses:
+        '201':
+          description: Trip created
+
+  /api/v1/trips/search:
+    get:
+      tags: [Trips]
+      summary: Search published trips
+      security: []
+      parameters:
+        - name: origin_lat
+          in: query
+          schema:
+            type: number
+        - name: origin_lng
+          in: query
+          schema:
+            type: number
+        - name: destination_lat
+          in: query
+          schema:
+            type: number
+        - name: destination_lng
+          in: query
+          schema:
+            type: number
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: seats
+          in: query
+          schema:
+            type: integer
+        - name: accepts_parcels
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Paginated trips
+
+  /api/v1/trips/{id}:
+    get:
+      tags: [Trips]
+      summary: Get trip details
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Trip details
+    patch:
+      tags: [Trips]
+      summary: Update a draft trip
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Trip updated
+
+  /api/v1/trips/{id}/publish:
+    patch:
+      tags: [Trips]
+      summary: Publish a draft trip
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Trip published
+
+  /api/v1/trips/{id}/unpublish:
+    patch:
+      tags: [Trips]
+      summary: Unpublish a trip
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Trip unpublished
+
+  # ─── Bookings ───
+  /api/v1/bookings:
+    post:
+      tags: [Bookings]
+      summary: Create a booking (with seat locking)
+      description: |
+        Creates a booking. Uses SELECT FOR UPDATE to prevent overbooking.
+        Returns 403 CANNOT_BOOK_OWN_TRIP if driver_id == passenger_id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trip_id]
+              properties:
+                trip_id:
+                  type: string
+                  format: uuid
+                seats_booked:
+                  type: integer
+                  default: 1
+      responses:
+        '201':
+          description: Booking created
+        '403':
+          description: Cannot book own trip
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: CANNOT_BOOK_OWN_TRIP
+                message: You cannot book your own trip
+        '409':
+          description: Insufficient seats
+
+  /api/v1/bookings/{id}:
+    get:
+      tags: [Bookings]
+      summary: Get booking details
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Booking details
+
+  /api/v1/bookings/{id}/accept:
+    patch:
+      tags: [Bookings]
+      summary: Accept a booking (driver)
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Booking accepted
+
+  /api/v1/bookings/{id}/reject:
+    patch:
+      tags: [Bookings]
+      summary: Reject a booking (driver)
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Booking rejected
+
+  /api/v1/bookings/{id}/cancel:
+    patch:
+      tags: [Bookings]
+      summary: Cancel a booking
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Booking cancelled
+
+  /api/v1/me/bookings:
+    get:
+      tags: [Bookings]
+      summary: Get my bookings as passenger
+      responses:
+        '200':
+          description: List of bookings
+
+  /api/v1/me/driver/bookings:
+    get:
+      tags: [Bookings]
+      summary: Get bookings for my trips as driver
+      responses:
+        '200':
+          description: List of bookings
+
+  # ─── Deliveries ───
+  /api/v1/deliveries:
+    post:
+      tags: [Deliveries]
+      summary: Create a delivery request
+      description: |
+        Business rules applied:
+        - RB-DEL-0: Checks minimum delay before departure (from platform_settings)
+        - RB-DEL-1: Trip must accept parcels (409 TRIP_DOES_NOT_ACCEPT_PARCELS)
+        - RB-DEL-2: Cannot send on own trip (403 CANNOT_REQUEST_DELIVERY_ON_OWN_TRIP)
+        - RB-DEL-3: Recipient must be valid (400 INVALID_RECIPIENT)
+        - RB-DEL-5/6: Status set based on trip.delivery_mode (manual→pending, instant→accepted)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trip_id, parcel]
+              properties:
+                trip_id:
+                  type: string
+                recipient_email:
+                  type: string
+                  format: email
+                pickup_notes:
+                  type: string
+                dropoff_notes:
+                  type: string
+                parcel:
+                  type: object
+                  required: [size_category]
+                  properties:
+                    size_category:
+                      type: string
+                      enum: [XS, S, M, L]
+                    weight_kg:
+                      type: number
+                    declared_value:
+                      type: number
+                    instructions:
+                      type: string
+      responses:
+        '201':
+          description: Delivery created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '403':
+          description: Cannot request delivery on own trip
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                too_late:
+                  value:
+                    code: DELIVERY_TOO_LATE_BEFORE_DEPARTURE
+                    message: Too close to departure time
+                no_parcels:
+                  value:
+                    code: TRIP_DOES_NOT_ACCEPT_PARCELS
+                    message: This trip does not accept parcels
+
+  /api/v1/deliveries/{id}:
+    get:
+      tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Delivery details
+
+  /api/v1/deliveries/{id}/accept:
+    patch:
+      tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Delivery accepted
+
+  /api/v1/deliveries/{id}/reject:
+    patch:
+      tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Delivery rejected
+
+  /api/v1/deliveries/{id}/cancel:
+    patch:
+      tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Delivery cancelled
+
+  /api/v1/deliveries/{id}/mark-in-transit:
+    patch:
+      tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Delivery marked in transit
+
+  /api/v1/deliveries/{id}/mark-delivered:
+    patch:
+      tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Delivery marked delivered
+
+  /api/v1/deliveries/{id}/confirm-delivery:
+    post:
+      tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Delivery confirmed
+
+  /api/v1/me/deliveries/sent:
+    get:
+      tags: [Deliveries]
+      summary: My sent deliveries
+      responses:
+        '200':
+          description: List
+
+  /api/v1/me/deliveries/received:
+    get:
+      tags: [Deliveries]
+      summary: My received deliveries
+      responses:
+        '200':
+          description: List
+
+  /api/v1/me/driver/deliveries:
+    get:
+      tags: [Deliveries]
+      summary: Deliveries for my trips as driver
+      responses:
+        '200':
+          description: List of deliveries for driver's trips
+
+  # ─── Admin Settings ───
+  /api/v1/admin/settings:
+    get:
+      tags: [Admin Settings]
+      summary: Get platform settings (delivery delays)
+      description: Returns the platform configuration for delivery minimum delays before departure.
+      responses:
+        '200':
+          description: Platform settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformSettings'
+        '403':
+          description: Admin only
+    put:
+      tags: [Admin Settings]
+      summary: Update platform settings
+      description: Update the minimum delay before departure for deliveries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliveries_min_hours_before_departure, deliveries_min_minutes_before_departure]
+              properties:
+                deliveries_min_hours_before_departure:
+                  type: integer
+                  minimum: 0
+                  description: Minimum hours before departure
+                deliveries_min_minutes_before_departure:
+                  type: integer
+                  minimum: 0
+                  maximum: 59
+                  description: Minimum minutes before departure (0-59)
+      responses:
+        '200':
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformSettings'
+        '400':
+          description: Invalid input
+        '403':
+          description: Admin only
+
+  # ─── Payments ───
+  /api/v1/payments/intent:
+    post:
+      tags: [Payments]
+      summary: Create Stripe PaymentIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                booking_id:
+                  type: string
+                  format: uuid
+                delivery_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: PaymentIntent created with client_secret
+
+  /api/v1/payments/webhook:
+    post:
+      tags: [Payments]
+      summary: Stripe webhook (idempotent)
+      security: []
+      description: Receives Stripe events. Idempotent via stripe_events table.
+      responses:
+        '200':
+          description: Event processed
+
+  /api/v1/payments/{id}:
+    get:
+      tags: [Payments]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Payment details
+
+  # ─── Wallet ───
+  /api/v1/me/wallet:
+    get:
+      tags: [Wallet]
+      summary: Get my wallet
+      responses:
+        '200':
+          description: Wallet details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+
+  /api/v1/me/wallet/transactions:
+    get:
+      tags: [Wallet]
+      summary: Get wallet transactions
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Paginated transactions
+
+  # ─── Policies (Admin) ───
+  /api/v1/admin/policies/cancellation:
+    get:
+      tags: [Policies]
+      summary: List cancellation policies
+      responses:
+        '200':
+          description: List of policies
+    post:
+      tags: [Policies]
+      summary: Create cancellation policy
+      responses:
+        '201':
+          description: Policy created
+
+  /api/v1/admin/policies/cancellation/{id}:
+    patch:
+      tags: [Policies]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Policy updated
+
+  /api/v1/admin/policies/cancellation/{id}/activate:
+    post:
+      tags: [Policies]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Policy activated
+
+  # ─── Payouts (Admin) ───
+  /api/v1/admin/eligible:
+    get:
+      tags: [Payouts]
+      summary: Get payout eligible users
+      parameters:
+        - name: asOfDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Eligible users list
+
+  /api/v1/admin/payout-batches:
+    post:
+      tags: [Payouts]
+      summary: Create payout batch
+      responses:
+        '201':
+          description: Batch created
+
+  /api/v1/admin/payout-batches/{id}:
+    get:
+      tags: [Payouts]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Batch details
+
+  /api/v1/admin/payout-batches/{id}/execute:
+    post:
+      tags: [Payouts]
+      summary: Execute payout batch (debit wallets)
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Batch executed
+
+  /api/v1/admin/payouts/{id}/retry:
+    post:
+      tags: [Payouts]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Payout retried
+
+  /api/v1/admin/payouts/{id}/mark-paid:
+    post:
+      tags: [Payouts]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Payout marked as paid
+
+  # ─── Messaging ───
+  /api/v1/conversations:
+    get:
+      tags: [Messaging]
+      summary: List conversations
+      parameters:
+        - name: bookingId
+          in: query
+          schema:
+            type: string
+        - name: deliveryId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of conversations
+
+  /api/v1/conversations/{id}/messages:
+    get:
+      tags: [Messaging]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Messages
+    post:
+      tags: [Messaging]
+      summary: Send a message
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Message sent
+
+  # ─── Reviews ───
+  /api/v1/reviews:
+    post:
+      tags: [Reviews]
+      summary: Create a review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewee_id, rating]
+              properties:
+                reviewee_id:
+                  type: string
+                  format: uuid
+                trip_id:
+                  type: string
+                  format: uuid
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+      responses:
+        '201':
+          description: Review created
+
+  /api/v1/users/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: Get user reviews
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: User reviews with average rating
+
+  # ─── Reports ───
+  /api/v1/reports:
+    post:
+      tags: [Reports]
+      summary: Report a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reported_id, reason]
+              properties:
+                reported_id:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+      responses:
+        '201':
+          description: Report created
+
+  /api/v1/admin/reports:
+    get:
+      tags: [Reports]
+      summary: List reports (admin)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of reports
+
+  /api/v1/admin/reports/{id}/resolve:
+    post:
+      tags: [Reports]
+      summary: Resolve a report (admin)
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Report resolved
+
+  # ─── Cancellation & Refund Engine ───
+
+  /api/v1/bookings/{id}/cancel-preview:
+    get:
+      tags: [Cancellations]
+      summary: Preview booking cancellation (dry-run)
+      description: |
+        Returns the refund calculation for a potential cancellation.
+        Uses the paramétrable refund policy engine to determine:
+        - Whether cancellation is allowed
+        - Refund amount
+        - Cancellation fees
+        - Driver compensation
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Cancellation preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelPreview'
+        '404':
+          description: Booking not found
+
+  /api/v1/bookings/{id}/cancel:
+    post:
+      tags: [Cancellations]
+      summary: Cancel a booking with refund workflow
+      description: |
+        Executes the full cancellation workflow:
+        1. Validates actor role and permissions
+        2. Resolves applicable refund policy
+        3. Validates cancellation and refund request windows
+        4. Computes refund amounts
+        5. Executes Stripe refund if applicable
+        6. Writes append-only ledger corrections
+        7. Updates booking status
+        8. Creates cancellation_request record
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for cancellation
+      responses:
+        '200':
+          description: Cancellation executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelResult'
+        '400':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                already_cancelled:
+                  value:
+                    code: ALREADY_CANCELLED
+                    message: This item has already been cancelled
+                not_allowed:
+                  value:
+                    code: CANCELLATION_NOT_ALLOWED
+                    message: Cancellation is not allowed in current status
+                window_expired:
+                  value:
+                    code: REFUND_REQUEST_WINDOW_EXPIRED
+                    message: The refund request deadline has passed
+                invalid_policy:
+                  value:
+                    code: INVALID_REFUND_POLICY
+                    message: No applicable refund policy found
+
+  /api/v1/deliveries/{id}/cancel-preview:
+    get:
+      tags: [Cancellations]
+      summary: Preview delivery cancellation (dry-run)
+      description: |
+        Returns the refund calculation for a potential delivery cancellation.
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Cancellation preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelPreview'
+        '404':
+          description: Delivery not found
+
+  /api/v1/deliveries/{id}/cancel:
+    post:
+      tags: [Cancellations]
+      summary: Cancel a delivery with refund workflow
+      description: |
+        Executes the full delivery cancellation workflow with Stripe refund and ledger correction.
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Cancellation executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelResult'
+        '400':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Admin Refund Policies ───
+
+  /api/v1/admin/refund-policies:
+    get:
+      tags: [Refund Policies]
+      summary: List all refund policies
+      description: Admin/support can list all paramétrable refund policies.
+      parameters:
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+            enum: [booking, delivery]
+        - name: actor_role
+          in: query
+          schema:
+            type: string
+            enum: [passenger, sender, driver, admin]
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of refund policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RefundPolicy'
+    post:
+      tags: [Refund Policies]
+      summary: Create a new refund policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundPolicyInput'
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundPolicy'
+
+  /api/v1/admin/refund-policies/{id}:
+    patch:
+      tags: [Refund Policies]
+      summary: Update a refund policy
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundPolicyInput'
+      responses:
+        '200':
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundPolicy'
+
+  /api/v1/admin/refund-policies/{id}/activate:
+    post:
+      tags: [Refund Policies]
+      summary: Activate a refund policy
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Policy activated
+
+  /api/v1/admin/refund-policies/{id}/deactivate:
+    post:
+      tags: [Refund Policies]
+      summary: Deactivate a refund policy
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Policy deactivated
+
+  # ─── Admin Refund Override ───
+
+  /api/v1/admin/refunds/override:
+    post:
+      tags: [Refund Policies]
+      summary: Admin override refund
+      description: |
+        Admin can force a refund on any booking or delivery, bypassing the standard policy.
+        Creates Stripe refund, ledger corrections, and cancellation_request record.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource_type, resource_id, refund_amount_cents]
+              properties:
+                resource_type:
+                  type: string
+                  enum: [booking, delivery]
+                resource_id:
+                  type: string
+                refund_amount_cents:
+                  type: integer
+                  description: Amount to refund in cents
+                reason:
+                  type: string
+                override_policy:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Override refund executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelResult'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                no_payment:
+                  value:
+                    code: NO_PAYMENT_FOUND
+                    message: No succeeded payment found for this resource
+                already_refunded:
+                  value:
+                    code: REFUND_ALREADY_PROCESSED
+                    message: This resource has already been fully refunded
+
+  # ─── Admin Cancellation Requests ───
+
+  /api/v1/admin/cancellation-requests:
+    get:
+      tags: [Refund Policies]
+      summary: List cancellation requests
+      description: Admin/support can view all cancellation requests with their status and financial details.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [requested, approved, rejected, refunded, closed]
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+            enum: [booking, delivery]
+      responses:
+        '200':
+          description: List of cancellation requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CancellationRequest'
