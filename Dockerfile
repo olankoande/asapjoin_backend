@@ -35,10 +35,12 @@ COPY --from=build /usr/src/app/node_modules ./node_modules
 COPY --from=build /usr/src/app/dist ./dist
 COPY --from=build /usr/src/app/prisma ./prisma
 COPY --from=build /usr/src/app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /usr/src/app/public ./public
+COPY --from=build /usr/src/app/src/openapi ./dist/openapi
 COPY package*.json ./
 
 EXPOSE 3000
 
-# Commande pour exécuter les migrations et démarrer le serveur
-# Assurez-vous d'avoir un script "start:prod" (ex: "node dist/main.js") dans votre package.json
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]
+# Démarrage de l'API. Ce projet n'embarque pas de migrations Prisma versionnées,
+# donc "prisma migrate deploy" échoue sur une base existante (P3005).
+CMD ["npm", "start"]
