@@ -19,6 +19,11 @@ export const env = {
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'change-me',
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+  GOOGLE_ALLOWED_ISSUERS: (process.env.GOOGLE_ALLOWED_ISSUERS || 'https://accounts.google.com,accounts.google.com')
+    .split(',')
+    .map((issuer) => issuer.trim())
+    .filter(Boolean),
 
   // Stripe
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',

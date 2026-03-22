@@ -10,7 +10,7 @@ datasource db {
 model users {
   id                                          BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
   email                                       String                      @unique(map: "uq_users_email") @db.VarChar(255)
-  password_hash                               String                      @db.VarChar(255)
+  password_hash                               String?                     @db.VarChar(255)
   display_name                                String?                     @db.VarChar(120)
   photo_url                                   String?                     @db.VarChar(1024)
   phone_number                                String?                     @db.VarChar(50)
@@ -25,14 +25,19 @@ model users {
   deleted_at                                  DateTime?                   @db.DateTime(0)
   avatar_url                                  String?                     @db.VarChar(500)
   email_verified                              Boolean                     @default(false)
+  google_sub                                  String?                     @unique(map: "uq_users_google_sub") @db.VarChar(255)
+  auth_provider                               users_auth_provider         @default(local)
   first_name                                  String?                     @db.VarChar(100)
   is_banned                                   Boolean                     @default(false)
   last_name                                   String?                     @db.VarChar(100)
   refresh_token                               String?                     @db.Text
   reset_token                                 String?                     @db.VarChar(255)
   reset_token_expiry                          DateTime?                   @db.DateTime(0)
+  terms_accepted_version                      String?                     @db.VarChar(50)
+  terms_accepted_at                           DateTime?                   @db.DateTime(0)
   admin_audit_logs                            admin_audit_logs[]
   bookings                                    bookings[]
+  contracts_published                         contracts[]
   conversation_participants                   conversation_participants[]
   deliveries_received                         deliveries[]                @relation("recipient")
   deliveries_sent                             deliveries[]                @relation("sender")
@@ -45,6 +50,7 @@ model users {
   reviews_reviews_author_idTousers            reviews[]                   @relation("reviews_author_idTousers")
   reviews_reviews_target_user_idTousers       reviews[]                   @relation("reviews_target_user_idTousers")
   settings                                    settings[]
+  user_roles                                  user_roles[]
   trips_as_driver                             trips[]
   vehicles                                    vehicles[]
   wallet                                      wallets?
@@ -78,6 +84,16 @@ model trips {
   to_city                 String                   @db.VarChar(120)
   from_address            String?                  @db.VarChar(255)
   to_address              String?                  @db.VarChar(255)
+  departure_city_id       BigInt?                  @db.UnsignedBigInt
+  arrival_city_id         BigInt?                  @db.UnsignedBigInt
+  departure_point_id      BigInt?                  @db.UnsignedBigInt
+  arrival_point_id        BigInt?                  @db.UnsignedBigInt
+  departure_address       String?                  @db.VarChar(255)
+  departure_lat           Decimal?                 @db.Decimal(10, 7)
+  departure_lng           Decimal?                 @db.Decimal(10, 7)
+  arrival_address         String?                  @db.VarChar(255)
+  arrival_lat             Decimal?                 @db.Decimal(10, 7)
+  arrival_lng             Decimal?                 @db.Decimal(10, 7)
   departure_at            DateTime                 @db.DateTime(0)
   price_per_seat          Decimal                  @default(0.00) @db.Decimal(12, 2)
   currency                String                   @default("CAD") @db.Char(3)
@@ -99,15 +115,61 @@ model trips {
   bookings                bookings[]
   deliveries              deliveries[]
   stops                   trip_stops[]
+  arrival_city            cities?                  @relation("trip_arrival_city", fields: [arrival_city_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_trips_arrival_city")
+  arrival_point           city_points?             @relation("trip_arrival_point", fields: [arrival_point_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_trips_arrival_point")
+  departure_city          cities?                  @relation("trip_departure_city", fields: [departure_city_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_trips_departure_city")
+  departure_point         city_points?             @relation("trip_departure_point", fields: [departure_point_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_trips_departure_point")
   driver                  users                    @relation(fields: [driver_id], references: [id], onUpdate: Restrict, map: "fk_trips_driver")
   vehicle                 vehicles                 @relation(fields: [vehicle_id], references: [id], onUpdate: Restrict, map: "fk_trips_vehicle")
 
   @@index([vehicle_id], map: "fk_trips_vehicle")
+  @@index([departure_city_id], map: "idx_trips_departure_city")
+  @@index([arrival_city_id], map: "idx_trips_arrival_city")
+  @@index([departure_point_id], map: "idx_trips_departure_point")
+  @@index([arrival_point_id], map: "idx_trips_arrival_point")
   @@index([accepts_parcels, departure_at], map: "idx_trips_accepts_parcels")
   @@index([driver_id], map: "idx_trips_driver")
   @@index([status, departure_at], map: "idx_trips_published")
   @@index([from_city, to_city, departure_at], map: "idx_trips_search")
   @@index([delivery_mode], map: "idx_trips_delivery_mode")
+}
+
+model cities {
+  id              BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  name            String      @db.VarChar(80)
+  province        String?     @db.VarChar(40)
+  country         String      @default("Canada") @db.VarChar(40)
+  is_active       Boolean     @default(true)
+  created_at      DateTime    @default(now()) @db.DateTime(0)
+  updated_at      DateTime    @default(now()) @updatedAt @db.DateTime(0)
+  arrival_trips   trips[]     @relation("trip_arrival_city")
+  city_points     city_points[]
+  departure_trips trips[]     @relation("trip_departure_city")
+
+  @@unique([name, province, country], map: "uq_cities_name_province_country")
+  @@index([is_active, name], map: "idx_cities_active_name")
+}
+
+model city_points {
+  id                  BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  city_id             BigInt                 @db.UnsignedBigInt
+  name                String                 @db.VarChar(160)
+  address             String                 @db.VarChar(255)
+  lat                 Decimal                @db.Decimal(10, 7)
+  lng                 Decimal                @db.Decimal(10, 7)
+  point_type          city_points_point_type @default(custom)
+  popularity_score    Int                    @default(0)
+  usage_count         Int                    @default(0)
+  is_active           Boolean                @default(true)
+  created_at          DateTime               @default(now()) @db.DateTime(0)
+  updated_at          DateTime               @default(now()) @updatedAt @db.DateTime(0)
+  arrival_trips       trips[]                @relation("trip_arrival_point")
+  city                cities                 @relation(fields: [city_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_city_points_city")
+  departure_trips     trips[]                @relation("trip_departure_point")
+
+  @@index([city_id], map: "idx_city_points_city")
+  @@index([city_id, is_active, popularity_score], map: "idx_city_points_lookup")
+  @@index([point_type], map: "idx_city_points_type")
 }
 
 model trip_stops {
@@ -309,6 +371,21 @@ model payouts {
   @@index([user_id, created_at], map: "idx_payouts_user")
 }
 
+model contracts {
+  id                    BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  title                 String   @db.VarChar(255)
+  version               String   @unique(map: "uq_contracts_version") @db.VarChar(50)
+  content               String   @db.LongText
+  is_active             Boolean  @default(false)
+  published_by_admin_id BigInt?  @db.UnsignedBigInt
+  created_at            DateTime @default(now()) @db.DateTime(0)
+  updated_at            DateTime @default(now()) @updatedAt @db.DateTime(0)
+  published_by          users?   @relation(fields: [published_by_admin_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_contracts_published_by")
+
+  @@index([is_active, created_at], map: "idx_contracts_active_created")
+  @@index([published_by_admin_id], map: "idx_contracts_published_by")
+}
+
 model cancellation_policies {
   id                  BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
   name                String                      @db.VarChar(120)
@@ -362,6 +439,59 @@ model admin_audit_logs {
 
   @@index([admin_id, created_at], map: "idx_admin_audit_logs_admin")
   @@index([entity_type, entity_id], map: "idx_admin_audit_logs_entity")
+}
+
+model roles {
+  id               BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  name             String             @db.VarChar(120)
+  code             String             @unique(map: "uq_roles_code") @db.VarChar(80)
+  description      String?            @db.VarChar(500)
+  is_system        Boolean            @default(false)
+  created_at       DateTime           @default(now()) @db.DateTime(0)
+  updated_at       DateTime           @default(now()) @updatedAt @db.DateTime(0)
+  role_permissions role_permissions[]
+  user_roles       user_roles[]
+
+  @@index([name], map: "idx_roles_name")
+}
+
+model permissions {
+  id               BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  module           String             @db.VarChar(80)
+  action           String             @db.VarChar(80)
+  code             String             @unique(map: "uq_permissions_code") @db.VarChar(120)
+  description      String?            @db.VarChar(500)
+  created_at       DateTime           @default(now()) @db.DateTime(0)
+  updated_at       DateTime           @default(now()) @updatedAt @db.DateTime(0)
+  role_permissions role_permissions[]
+
+  @@index([module, action], map: "idx_permissions_module_action")
+}
+
+model role_permissions {
+  id            BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  role_id       BigInt      @db.UnsignedBigInt
+  permission_id BigInt      @db.UnsignedBigInt
+  created_at    DateTime    @default(now()) @db.DateTime(0)
+  role          roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_role_permissions_role")
+  permission    permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_role_permissions_permission")
+
+  @@unique([role_id, permission_id], map: "uq_role_permissions_role_permission")
+  @@index([role_id], map: "idx_role_permissions_role")
+  @@index([permission_id], map: "idx_role_permissions_permission")
+}
+
+model user_roles {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id     BigInt   @db.UnsignedBigInt
+  role_id     BigInt   @db.UnsignedBigInt
+  created_at  DateTime @default(now()) @db.DateTime(0)
+  user        users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_user_roles_user")
+  role        roles    @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_user_roles_role")
+
+  @@unique([user_id, role_id], map: "uq_user_roles_user_role")
+  @@index([user_id], map: "idx_user_roles_user")
+  @@index([role_id], map: "idx_user_roles_role")
 }
 
 model conversations {
@@ -604,6 +734,11 @@ enum users_role {
   admin
 }
 
+enum users_auth_provider {
+  local
+  google
+}
+
 enum trips_booking_mode {
   instant
   manual
@@ -633,6 +768,15 @@ enum trips_parcel_price_mode {
   fixed
   by_size
   by_distance
+}
+
+enum city_points_point_type {
+  station
+  airport
+  university
+  mall
+  downtown
+  custom
 }
 
 enum conversations_type {

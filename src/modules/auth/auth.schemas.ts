@@ -17,6 +17,10 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
+export const googleAuthSchema = z.object({
+  credential: z.string().min(1),
+});
+
 export const forgotPasswordSchema = z.object({
   email: z.string().email(),
 });
@@ -29,5 +33,6 @@ export const resetPasswordSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
+export type GoogleAuthInput = z.infer<typeof googleAuthSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

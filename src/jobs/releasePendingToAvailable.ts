@@ -14,9 +14,28 @@ import { logger } from '../config/logger';
 import { getFeeSettings } from '../modules/fees/feeCalculator';
 import { recordRelease } from '../modules/fees/ledgerWriter';
 
+let disputesTableAvailableCache: boolean | null = null;
+
+async function hasDisputesTable() {
+  if (disputesTableAvailableCache != null) return disputesTableAvailableCache;
+
+  const rows = await prisma.$queryRaw<Array<{ cnt: bigint | number }>>`
+    SELECT COUNT(*) as cnt
+    FROM information_schema.tables
+    WHERE table_schema = DATABASE() AND table_name = 'disputes'
+  `;
+
+  disputesTableAvailableCache = Number(rows[0]?.cnt || 0) > 0;
+  if (!disputesTableAvailableCache) {
+    logger.warn('[JOB] disputes table missing: dispute checks will be skipped');
+  }
+  return disputesTableAvailableCache;
+}
+
 export async function releasePendingToAvailable() {
   const settings = await getFeeSettings();
   const holdDays = settings.hold_days_before_available;
+  const disputesTableAvailable = await hasDisputesTable();
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - holdDays);
 
@@ -51,14 +70,16 @@ export async function releasePendingToAvailable() {
       if (alreadyReleased[0]?.cnt > 0) continue;
 
       // Check no active dispute
-      const activeDispute = await prisma.$queryRaw<Array<{ cnt: number }>>`
-        SELECT COUNT(*) as cnt FROM disputes
-        WHERE kind = 'booking' AND reference_id = ${booking.id}
-          AND status IN ('open', 'investigating')
-      `;
-      if (activeDispute[0]?.cnt > 0) {
-        logger.info(`[JOB] Skipping booking ${booking.id}: active dispute`);
-        continue;
+      if (disputesTableAvailable) {
+        const activeDispute = await prisma.$queryRaw<Array<{ cnt: number }>>`
+          SELECT COUNT(*) as cnt FROM disputes
+          WHERE kind = 'booking' AND reference_id = ${booking.id}
+            AND status IN ('open', 'investigating')
+        `;
+        if (activeDispute[0]?.cnt > 0) {
+          logger.info(`[JOB] Skipping booking ${booking.id}: active dispute`);
+          continue;
+        }
       }
 
       // Find driver wallet and the original credit amount
@@ -121,14 +142,16 @@ export async function releasePendingToAvailable() {
       if (alreadyReleased[0]?.cnt > 0) continue;
 
       // Check no active dispute
-      const activeDispute = await prisma.$queryRaw<Array<{ cnt: number }>>`
-        SELECT COUNT(*) as cnt FROM disputes
-        WHERE kind = 'delivery' AND reference_id = ${delivery.id}
-          AND status IN ('open', 'investigating')
-      `;
-      if (activeDispute[0]?.cnt > 0) {
-        logger.info(`[JOB] Skipping delivery ${delivery.id}: active dispute`);
-        continue;
+      if (disputesTableAvailable) {
+        const activeDispute = await prisma.$queryRaw<Array<{ cnt: number }>>`
+          SELECT COUNT(*) as cnt FROM disputes
+          WHERE kind = 'delivery' AND reference_id = ${delivery.id}
+            AND status IN ('open', 'investigating')
+        `;
+        if (activeDispute[0]?.cnt > 0) {
+          logger.info(`[JOB] Skipping delivery ${delivery.id}: active dispute`);
+          continue;
+        }
       }
 
       const wallet = await prisma.wallets.findUnique({ where: { user_id: delivery.trip_driver_id } });

@@ -26,6 +26,10 @@ import reviewsRoutes from './modules/reviews/reviews.routes';
 import disputesRoutes from './modules/disputes/disputes.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import cancellationsRoutes from './modules/cancellations/cancellations.routes';
+import citiesRoutes from './modules/cities/cities.routes';
+import cityPointsRoutes from './modules/cityPoints/cityPoints.routes';
+import rbacRoutes from './modules/rbac/rbac.routes';
+import contractsRoutes from './modules/contracts/contracts.routes';
 import stripeWebhook from './webhooks/stripeWebhook';
 
 // Bookings extra routes (me/bookings, me/driver/bookings)
@@ -73,8 +77,12 @@ app.use(`${v1}/admin`, payoutsRoutes);
 app.use(`${v1}/conversations`, messagingRoutes);
 app.use(`${v1}/reviews`, reviewsRoutes);
 app.use(`${v1}/disputes`, disputesRoutes);
+app.use(`${v1}/contracts`, contractsRoutes);
 app.use(`${v1}`, adminRoutes); // /reports and /admin/reports
 app.use(`${v1}`, cancellationsRoutes); // /bookings/:id/cancel-preview, /cancel, /admin/refund-policies, etc.
+app.use(`${v1}`, citiesRoutes);
+app.use(`${v1}`, cityPointsRoutes);
+app.use(`${v1}`, rbacRoutes);
 
 // Extra routes for me/bookings and me/driver/bookings
 app.get(`${v1}/me/bookings`, authenticate, checkNotBanned, bookingsCtrl.getMyHandler);

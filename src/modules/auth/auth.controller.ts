@@ -28,6 +28,15 @@ export async function refreshHandler(req: Request, res: Response, next: NextFunc
   }
 }
 
+export async function meHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await authService.getAuthenticatedUser(req.user!.userId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function forgotPasswordHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await authService.forgotPassword(req.body);

@@ -14,6 +14,8 @@ import { computeBookingFees, computeDeliveryFees } from '../fees/feeCalculator';
 import { recordDisputeHold, recordDisputeRelease, recordRefund, ensureWallet } from '../fees/ledgerWriter';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-04-30.basil' as any });
+let disputesTableAvailableCache: boolean | null = null;
+let disputeRepliesTableAvailableCache: boolean | null = null;
 
 interface OpenDisputeInput {
   kind: 'booking' | 'delivery';
@@ -28,10 +30,52 @@ interface ResolveDisputeInput {
   note?: string;
 }
 
+async function hasTable(tableName: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ cnt: bigint | number }>>`
+    SELECT COUNT(*) as cnt
+    FROM information_schema.tables
+    WHERE table_schema = DATABASE() AND table_name = ${tableName}
+  `;
+  return Number(rows[0]?.cnt || 0) > 0;
+}
+
+async function isDisputesTableAvailable(): Promise<boolean> {
+  if (disputesTableAvailableCache == null) {
+    disputesTableAvailableCache = await hasTable('disputes');
+    if (!disputesTableAvailableCache) {
+      logger.warn('Disputes feature disabled: table "disputes" is missing in the current database');
+    }
+  }
+  return disputesTableAvailableCache;
+}
+
+async function isDisputeRepliesTableAvailable(): Promise<boolean> {
+  if (disputeRepliesTableAvailableCache == null) {
+    disputeRepliesTableAvailableCache = await hasTable('dispute_replies');
+    if (!disputeRepliesTableAvailableCache) {
+      logger.warn('Disputes replies feature disabled: table "dispute_replies" is missing in the current database');
+    }
+  }
+  return disputeRepliesTableAvailableCache;
+}
+
+async function ensureDisputesFeatureAvailable(requireReplies = false) {
+  const hasDisputes = await isDisputesTableAvailable();
+  const hasReplies = requireReplies ? await isDisputeRepliesTableAvailable() : true;
+
+  if (!hasDisputes || !hasReplies) {
+    throw Errors.badRequest(
+      'Le module de litiges n’est pas encore configuré dans cette base de données',
+      'DISPUTES_SCHEMA_MISSING',
+    );
+  }
+}
+
 /**
  * Open a dispute on a booking or delivery.
  */
 export async function openDispute(userId: string, input: OpenDisputeInput) {
+  await ensureDisputesFeatureAvailable();
   const refId = BigInt(input.reference_id);
 
   // Verify the reference exists and user is involved
@@ -149,6 +193,7 @@ export async function openDispute(userId: string, input: OpenDisputeInput) {
  * Resolve a dispute (admin only).
  */
 export async function resolveDispute(adminId: string, disputeId: string, input: ResolveDisputeInput) {
+  await ensureDisputesFeatureAvailable();
   const dId = BigInt(disputeId);
 
   const disputes = await prisma.$queryRaw<Array<{
@@ -312,6 +357,9 @@ export async function resolveDispute(adminId: string, disputeId: string, input: 
  * List disputes (admin).
  */
 export async function listDisputes(status?: string) {
+  if (!(await isDisputesTableAvailable())) {
+    return [];
+  }
   let rows: any[];
   if (status) {
     rows = await prisma.$queryRaw<any[]>`
@@ -336,6 +384,7 @@ export async function listDisputes(status?: string) {
  * Get a single dispute (admin — full details with replies).
  */
 export async function getDispute(disputeId: string) {
+  await ensureDisputesFeatureAvailable(true);
   const dId = BigInt(disputeId);
   const disputes = await prisma.$queryRaw<Array<any>>`
     SELECT d.*, u.first_name as opener_first_name, u.last_name as opener_last_name, u.email as opener_email
@@ -355,6 +404,7 @@ export async function getDispute(disputeId: string) {
  * Get a single dispute for a user (must be participant).
  */
 export async function getDisputeForUser(disputeId: string, userId: string) {
+  await ensureDisputesFeatureAvailable(true);
   const dId = BigInt(disputeId);
   const userBig = BigInt(userId);
 
@@ -384,6 +434,9 @@ export async function getDisputeForUser(disputeId: string, userId: string) {
  * List disputes for the current user (opened by them or involving them).
  */
 export async function listMyDisputes(userId: string) {
+  if (!(await isDisputesTableAvailable())) {
+    return [];
+  }
   const userBig = BigInt(userId);
 
   // Get disputes opened by user
@@ -431,6 +484,7 @@ export async function listMyDisputes(userId: string) {
  * Reply to a dispute (add information).
  */
 export async function replyToDispute(disputeId: string, userId: string, userRole: string, message: string) {
+  await ensureDisputesFeatureAvailable(true);
   const dId = BigInt(disputeId);
   const userBig = BigInt(userId);
 
@@ -484,6 +538,7 @@ export async function replyToDispute(disputeId: string, userId: string, userRole
  * Update dispute status (admin — e.g., open → investigating).
  */
 export async function updateDisputeStatus(adminId: string, disputeId: string, newStatus: string) {
+  await ensureDisputesFeatureAvailable();
   const dId = BigInt(disputeId);
   const validStatuses = ['open', 'investigating', 'closed'];
   if (!validStatuses.includes(newStatus)) {
@@ -519,6 +574,9 @@ export async function updateDisputeStatus(adminId: string, disputeId: string, ne
  * Get replies for a dispute.
  */
 async function getDisputeReplies(disputeId: string) {
+  if (!(await isDisputeRepliesTableAvailable())) {
+    return [];
+  }
   const dId = BigInt(disputeId);
   const rows = await prisma.$queryRaw<Array<any>>`
     SELECT dr.*, u.first_name, u.last_name, u.avatar_url

@@ -1,13 +1,37 @@
 import { z } from 'zod';
 
+const idValue = z.union([z.string(), z.number(), z.bigint()]).transform((value) => String(value));
+const optionalIdValue = z.union([z.string(), z.number(), z.bigint()]).transform((value) => String(value)).optional().nullable();
+
+const tripLocationBaseSchema = z.object({
+  point_id: optionalIdValue,
+  address: z.string().trim().min(1).max(255).optional(),
+  lat: z.number().min(-90).max(90).optional().nullable(),
+  lng: z.number().min(-180).max(180).optional().nullable(),
+});
+
+const tripLocationSchema = tripLocationBaseSchema.superRefine((value, ctx) => {
+  if (value.point_id) return;
+  if (!value.address) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Address is required for custom locations', path: ['address'] });
+  }
+});
+
 export const createTripSchema = z.object({
-  vehicle_id: z.string().min(1),
-  origin_address: z.string().min(1).max(500),
-  origin_lat: z.number().min(-90).max(90),
-  origin_lng: z.number().min(-180).max(180),
-  destination_address: z.string().min(1).max(500),
-  destination_lat: z.number().min(-90).max(90),
-  destination_lng: z.number().min(-180).max(180),
+  vehicle_id: idValue,
+  departure_city_id: optionalIdValue,
+  arrival_city_id: optionalIdValue,
+  departure: tripLocationSchema.optional(),
+  arrival: tripLocationSchema.optional(),
+
+  // Legacy payload compatibility
+  origin_address: z.string().trim().min(1).max(500).optional(),
+  origin_lat: z.number().min(-90).max(90).optional(),
+  origin_lng: z.number().min(-180).max(180).optional(),
+  destination_address: z.string().trim().min(1).max(500).optional(),
+  destination_lat: z.number().min(-90).max(90).optional(),
+  destination_lng: z.number().min(-180).max(180).optional(),
+
   departure_time: z.string().min(1),
   estimated_arrival: z.string().min(1).optional(),
   available_seats: z.number().int().min(1).max(50),
@@ -21,15 +45,33 @@ export const createTripSchema = z.object({
     lng: z.number().min(-180).max(180),
     stop_order: z.number().int().min(0),
   })).optional(),
+}).superRefine((value, ctx) => {
+  const structured = !!(value.departure_city_id && value.arrival_city_id && value.departure && value.arrival);
+  const legacy = !!(value.origin_address && value.destination_address);
+
+  if (!structured && !legacy) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Trip requires either structured city/point fields or legacy origin/destination fields',
+      path: ['departure_city_id'],
+    });
+  }
 });
 
 export const updateTripSchema = z.object({
-  origin_address: z.string().min(1).max(500).optional(),
+  departure_city_id: optionalIdValue,
+  arrival_city_id: optionalIdValue,
+  departure: tripLocationBaseSchema.partial().optional(),
+  arrival: tripLocationBaseSchema.partial().optional(),
+
+  // Legacy payload compatibility
+  origin_address: z.string().trim().min(1).max(500).optional(),
   origin_lat: z.number().min(-90).max(90).optional(),
   origin_lng: z.number().min(-180).max(180).optional(),
-  destination_address: z.string().min(1).max(500).optional(),
+  destination_address: z.string().trim().min(1).max(500).optional(),
   destination_lat: z.number().min(-90).max(90).optional(),
   destination_lng: z.number().min(-180).max(180).optional(),
+
   departure_time: z.string().min(1).optional(),
   estimated_arrival: z.string().min(1).optional().nullable(),
   available_seats: z.number().int().min(1).max(50).optional(),

@@ -1,39 +1,52 @@
-/**
- * Script de création d'un utilisateur admin.
- *
- * Usage :
- *   npx tsx prisma/seed-admin.ts
- *
- * Variables d'environnement optionnelles :
- *   ADMIN_EMAIL       (défaut : admin@asapjoin.com)
- *   ADMIN_PASSWORD    (défaut : Admin123!)
- *   ADMIN_DISPLAY_NAME (défaut : Admin)
- */
-
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { seedRbacData } from '../src/modules/rbac/rbac.service';
+import { SYSTEM_ROLE_CODES } from '../src/modules/rbac/rbac.constants';
 
 const prisma = new PrismaClient();
+
+async function ensureSuperAdminRoleAssignment(userId: bigint) {
+  const superAdminRole = await prisma.roles.findUnique({
+    where: { code: SYSTEM_ROLE_CODES.superAdmin },
+  });
+
+  if (!superAdminRole) {
+    return;
+  }
+
+  await prisma.user_roles.upsert({
+    where: {
+      user_id_role_id: {
+        user_id: userId,
+        role_id: superAdminRole.id,
+      },
+    },
+    update: {},
+    create: {
+      user_id: userId,
+      role_id: superAdminRole.id,
+    },
+  });
+}
 
 async function main() {
   const email = process.env.ADMIN_EMAIL || 'admin@asapjoin.com';
   const password = process.env.ADMIN_PASSWORD || 'Admin123!';
   const displayName = process.env.ADMIN_DISPLAY_NAME || 'Admin';
 
-  // Vérifier si l'admin existe déjà
+  await seedRbacData();
+
   const existing = await prisma.users.findUnique({ where: { email } });
   if (existing) {
-    console.log(`⚠️  Un utilisateur avec l'email "${email}" existe déjà (id=${existing.id}, role=${existing.role}).`);
     if (existing.role !== 'admin') {
-      // Promouvoir en admin
       await prisma.users.update({
         where: { email },
         data: { role: 'admin' },
       });
-      console.log(`✅ L'utilisateur a été promu au rôle "admin".`);
-    } else {
-      console.log(`ℹ️  L'utilisateur est déjà admin. Rien à faire.`);
     }
+
+    await ensureSuperAdminRoleAssignment(existing.id);
+    console.log(`Admin ready: ${email}`);
     return;
   }
 
@@ -49,19 +62,15 @@ async function main() {
     },
   });
 
-  console.log(`✅ Utilisateur admin créé avec succès !`);
-  console.log(`   ID    : ${admin.id}`);
-  console.log(`   Email : ${admin.email}`);
-  console.log(`   Nom   : ${admin.display_name}`);
-  console.log(`   Rôle  : ${admin.role}`);
-  console.log(`   Mot de passe : ${password}`);
-  console.log('');
-  console.log(`⚠️  Pensez à changer le mot de passe par défaut en production !`);
+  await ensureSuperAdminRoleAssignment(admin.id);
+
+  console.log(`Admin created: ${admin.email}`);
+  console.log(`Password: ${password}`);
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Erreur lors de la création de l\'admin :', e);
+  .catch((error) => {
+    console.error('Admin seed failed:', error);
     process.exit(1);
   })
   .finally(async () => {

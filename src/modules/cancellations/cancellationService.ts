@@ -55,7 +55,7 @@ export interface CancelPreviewResult {
 }
 
 export interface CancelResult {
-  cancellation_request_id: string;
+  cancellation_request_id: string | null;
   status: string;
   refund_amount_cents: number;
   cancellation_fee_cents: number;
@@ -64,6 +64,24 @@ export interface CancelResult {
 }
 
 // ─── Helpers ───
+
+let cancellationRequestsTableAvailableCache: boolean | null = null;
+
+async function hasCancellationRequestsTable(): Promise<boolean> {
+  if (cancellationRequestsTableAvailableCache == null) {
+    const rows = await prisma.$queryRaw<Array<{ cnt: bigint | number }>>`
+      SELECT COUNT(*) as cnt
+      FROM information_schema.tables
+      WHERE table_schema = DATABASE() AND table_name = 'cancellation_requests'
+    `;
+    cancellationRequestsTableAvailableCache = Number(rows[0]?.cnt || 0) > 0;
+    if (!cancellationRequestsTableAvailableCache) {
+      logger.warn('Cancellation requests feature disabled: table "cancellation_requests" is missing in the current database');
+    }
+  }
+
+  return cancellationRequestsTableAvailableCache;
+}
 
 /**
  * Determine actor role from user context and resource ownership.
@@ -169,7 +187,11 @@ async function createCancellationRequest(data: {
   stripe_refund_id: string | null;
   refund_id: bigint | null;
   is_admin_override: boolean;
-}): Promise<bigint> {
+}): Promise<bigint | null> {
+  if (!(await hasCancellationRequestsTable())) {
+    return null;
+  }
+
   await prisma.$executeRaw`
     INSERT INTO cancellation_requests
       (resource_type, resource_id, actor_user_id, actor_role, reason,
@@ -522,7 +544,7 @@ export async function executeBookingCancellation(
   }
 
   return {
-    cancellation_request_id: crId.toString(),
+    cancellation_request_id: crId?.toString() || null,
     status: calc && calc.refundable_to_customer_cents > 0 ? 'refunded' : 'approved',
     refund_amount_cents: calc?.refundable_to_customer_cents || 0,
     cancellation_fee_cents: calc?.cancellation_fee_cents || 0,
@@ -693,7 +715,7 @@ export async function executeDeliveryCancellation(
   }
 
   return {
-    cancellation_request_id: crId.toString(),
+    cancellation_request_id: crId?.toString() || null,
     status: calc && calc.refundable_to_customer_cents > 0 ? 'refunded' : 'approved',
     refund_amount_cents: calc?.refundable_to_customer_cents || 0,
     cancellation_fee_cents: calc?.cancellation_fee_cents || 0,
@@ -859,7 +881,7 @@ export async function adminOverrideRefund(
         refund_amount_cents: actualRefundCents,
         reason: input.reason,
         stripe_refund_id: stripeRefundId,
-        cancellation_request_id: crId.toString(),
+        cancellation_request_id: crId?.toString() || null,
       }),
     },
   });
@@ -867,7 +889,7 @@ export async function adminOverrideRefund(
   logger.info(`Admin ${adminUserId} override refund on ${input.resource_type} ${input.resource_id}: ${actualRefundCents}c`);
 
   return {
-    cancellation_request_id: crId.toString(),
+    cancellation_request_id: crId?.toString() || null,
     status: 'refunded',
     refund_amount_cents: actualRefundCents,
     cancellation_fee_cents: calc.cancellation_fee_cents,

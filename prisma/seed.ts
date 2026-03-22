@@ -10,6 +10,8 @@
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { seedRbacData } from '../src/modules/rbac/rbac.service';
+import { SYSTEM_ROLE_CODES } from '../src/modules/rbac/rbac.constants';
 
 const prisma = new PrismaClient();
 
@@ -36,6 +38,10 @@ async function main() {
 
   // Supprimer dans l'ordre inverse des dépendances
   await prisma.admin_audit_logs.deleteMany();
+  await prisma.user_roles.deleteMany();
+  await prisma.role_permissions.deleteMany();
+  await prisma.permissions.deleteMany();
+  await prisma.roles.deleteMany();
   await prisma.messages.deleteMany();
   await prisma.conversations.deleteMany();
   await prisma.reviews.deleteMany();
@@ -96,6 +102,29 @@ async function main() {
       default_mode: 'passenger',
     },
   });
+
+  await seedRbacData();
+
+  const superAdminRole = await prisma.roles.findUnique({ where: { code: SYSTEM_ROLE_CODES.superAdmin } });
+  const supportRole = await prisma.roles.findUnique({ where: { code: SYSTEM_ROLE_CODES.support } });
+
+  if (superAdminRole) {
+    await prisma.user_roles.create({
+      data: {
+        user_id: admin.id,
+        role_id: superAdminRole.id,
+      },
+    });
+  }
+
+  if (supportRole) {
+    await prisma.user_roles.create({
+      data: {
+        user_id: support.id,
+        role_id: supportRole.id,
+      },
+    });
+  }
 
   // Conducteurs
   const driver1 = await prisma.users.create({

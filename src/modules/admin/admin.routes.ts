@@ -1,18 +1,19 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { authenticate } from '../../middlewares/auth';
-import { requireRole } from '../../middlewares/rbac';
+import { requirePermission } from '../../middlewares/rbac';
 import { prisma } from '../../db/prisma';
 import { Errors } from '../../utils/errors';
 import { getPlatformSettings, updatePlatformSettings } from '../settings/settings.service';
 import { getFeeSettings } from '../fees/feeCalculator';
+import { getCurrentContract, listContracts, saveCurrentContract } from '../contracts/contracts.service';
 
 const router = Router();
 
 // ─── Admin Users ───
 
 // GET /admin/users
-router.get('/admin/users', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/users', authenticate, requirePermission('users.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, role, search } = req.query;
     const where: any = {};
@@ -41,6 +42,8 @@ router.get('/admin/users', authenticate, requireRole('admin', 'support'), async 
         status: true,
         is_banned: true,
         email_verified: true,
+        auth_provider: true,
+        google_sub: true,
         created_at: true,
         updated_at: true,
       },
@@ -51,7 +54,7 @@ router.get('/admin/users', authenticate, requireRole('admin', 'support'), async 
 });
 
 // POST /admin/users - create a user (admin can set role)
-router.post('/admin/users', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/admin/users', authenticate, requirePermission('users.create'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password, first_name, last_name, phone_number, role } = req.body;
     if (!email || !password || !first_name || !last_name) {
@@ -113,7 +116,7 @@ router.post('/admin/users', authenticate, requireRole('admin'), async (req: Requ
 });
 
 // GET /admin/users/:id
-router.get('/admin/users/:id', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/users/:id', authenticate, requirePermission('users.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = await prisma.users.findUnique({
       where: { id: BigInt(req.params.id as string) },
@@ -131,6 +134,8 @@ router.get('/admin/users/:id', authenticate, requireRole('admin', 'support'), as
         status: true,
         is_banned: true,
         email_verified: true,
+        auth_provider: true,
+        google_sub: true,
         default_mode: true,
         created_at: true,
         updated_at: true,
@@ -142,7 +147,7 @@ router.get('/admin/users/:id', authenticate, requireRole('admin', 'support'), as
 });
 
 // PATCH /admin/users/:id - update user fields (admin)
-router.patch('/admin/users/:id', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/admin/users/:id', authenticate, requirePermission('users.update'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = BigInt(req.params.id as string);
     const user = await prisma.users.findUnique({ where: { id: userId } });
@@ -183,6 +188,8 @@ router.patch('/admin/users/:id', authenticate, requireRole('admin'), async (req:
         status: true,
         is_banned: true,
         email_verified: true,
+        auth_provider: true,
+        google_sub: true,
         created_at: true,
         updated_at: true,
       },
@@ -204,7 +211,7 @@ router.patch('/admin/users/:id', authenticate, requireRole('admin'), async (req:
 });
 
 // PATCH /admin/users/:id/status (kept for backward compat)
-router.patch('/admin/users/:id/status', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/admin/users/:id/status', authenticate, requirePermission('users.ban'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = BigInt(req.params.id as string);
     const user = await prisma.users.findUnique({ where: { id: userId } });
@@ -247,7 +254,7 @@ router.patch('/admin/users/:id/status', authenticate, requireRole('admin'), asyn
 // ─── Admin Trips ───
 
 // GET /admin/trips
-router.get('/admin/trips', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/trips', authenticate, requirePermission('trips.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, search } = req.query;
     const where: any = {};
@@ -274,7 +281,7 @@ router.get('/admin/trips', authenticate, requireRole('admin', 'support'), async 
 // ─── Admin Bookings ───
 
 // GET /admin/bookings
-router.get('/admin/bookings', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/bookings', authenticate, requirePermission('bookings.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.query;
     const where: any = {};
@@ -303,7 +310,7 @@ router.get('/admin/bookings', authenticate, requireRole('admin', 'support'), asy
 // ─── Admin Deliveries ───
 
 // GET /admin/deliveries
-router.get('/admin/deliveries', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/deliveries', authenticate, requirePermission('deliveries.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.query;
     const where: any = {};
@@ -332,7 +339,7 @@ router.get('/admin/deliveries', authenticate, requireRole('admin', 'support'), a
 // ─── Admin Payments ───
 
 // GET /admin/payments
-router.get('/admin/payments', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/payments', authenticate, requirePermission('payments.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.query;
     const where: any = {};
@@ -355,7 +362,7 @@ router.get('/admin/payments', authenticate, requireRole('admin', 'support'), asy
 // ─── Admin Refunds ───
 
 // GET /admin/refunds
-router.get('/admin/refunds', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/refunds', authenticate, requirePermission('refunds.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.query;
     const where: any = {};
@@ -380,7 +387,7 @@ router.get('/admin/refunds', authenticate, requireRole('admin', 'support'), asyn
 });
 
 // POST /admin/refunds
-router.post('/admin/refunds', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/admin/refunds', authenticate, requirePermission('refunds.create'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { payment_id, amount, reason } = req.body;
     if (!payment_id || !amount) throw Errors.badRequest('payment_id and amount are required');
@@ -416,7 +423,7 @@ router.post('/admin/refunds', authenticate, requireRole('admin'), async (req: Re
 // ─── Admin Wallet ───
 
 // GET /admin/wallet/:userId
-router.get('/admin/wallet/:userId', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/wallet/:userId', authenticate, requirePermission('wallet.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const wallet = await prisma.wallets.findUnique({
       where: { user_id: BigInt(req.params.userId as string) },
@@ -427,7 +434,7 @@ router.get('/admin/wallet/:userId', authenticate, requireRole('admin', 'support'
 });
 
 // GET /admin/wallet/:userId/transactions
-router.get('/admin/wallet/:userId/transactions', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/wallet/:userId/transactions', authenticate, requirePermission('wallet.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const wallet = await prisma.wallets.findUnique({
       where: { user_id: BigInt(req.params.userId as string) },
@@ -456,7 +463,7 @@ router.get('/admin/wallet/:userId/transactions', authenticate, requireRole('admi
 });
 
 // POST /admin/wallet/adjustments
-router.post('/admin/wallet/adjustments', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/admin/wallet/adjustments', authenticate, requirePermission('wallet.adjust'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { user_id, amount, type, reason } = req.body;
     if (!user_id || amount === undefined || !type || !reason) {
@@ -523,7 +530,7 @@ router.post('/reports', authenticate, async (req: Request, res: Response, next: 
 });
 
 // GET /admin/reports - admin only
-router.get('/admin/reports', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/reports', authenticate, requirePermission('reports.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const status = req.query.status as string;
     const where: any = {};
@@ -541,7 +548,7 @@ router.get('/admin/reports', authenticate, requireRole('admin', 'support'), asyn
 });
 
 // POST /admin/reports/:id/resolve
-router.post('/admin/reports/:id/resolve', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/admin/reports/:id/resolve', authenticate, requirePermission('reports.update'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const reportId = BigInt(req.params.id as string);
     const report = await prisma.reports.findUnique({ where: { id: reportId } });
@@ -574,7 +581,7 @@ router.post('/admin/reports/:id/resolve', authenticate, requireRole('admin', 'su
 // ─── Admin Audit Logs ───
 
 // GET /admin/audit-logs
-router.get('/admin/audit-logs', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/audit-logs', authenticate, requirePermission('reports.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { action, admin_id } = req.query;
     const where: any = {};
@@ -596,7 +603,7 @@ router.get('/admin/audit-logs', authenticate, requireRole('admin'), async (req: 
 // ─── Admin Platform Settings ───
 
 // GET /admin/settings
-router.get('/admin/settings', authenticate, requireRole('admin'), async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/settings', authenticate, requirePermission('roles.read'), async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const settings = await getPlatformSettings();
     res.json(settings);
@@ -604,7 +611,7 @@ router.get('/admin/settings', authenticate, requireRole('admin'), async (_req: R
 });
 
 // PUT /admin/settings
-router.put('/admin/settings', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.put('/admin/settings', authenticate, requirePermission('roles.update'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { deliveries_min_hours_before_departure, deliveries_min_minutes_before_departure } = req.body;
     if (deliveries_min_hours_before_departure === undefined || deliveries_min_minutes_before_departure === undefined) {
@@ -633,6 +640,45 @@ router.put('/admin/settings', authenticate, requireRole('admin'), async (req: Re
 // ─── Admin Ledger & Commissions ───
 
 // Helper: check if finance migration columns exist (only cache true, retry on false)
+router.get('/admin/contracts', authenticate, requirePermission('roles.read'), async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await listContracts());
+  } catch (err) { next(err); }
+});
+
+router.get('/admin/contracts/current', authenticate, requirePermission('roles.read'), async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await getCurrentContract());
+  } catch (err) { next(err); }
+});
+
+router.put('/admin/contracts/current', authenticate, requirePermission('roles.update'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { title, version, content } = req.body;
+    if (!title || !version || !content) {
+      throw Errors.badRequest('title, version and content are required', 'INVALID_CONTRACT');
+    }
+
+    const contract = await saveCurrentContract(req.user!.userId, {
+      title: String(title),
+      version: String(version),
+      content: String(content),
+    });
+
+    await prisma.admin_audit_logs.create({
+      data: {
+        admin_id: BigInt(req.user!.userId),
+        action: 'CONTRACT_PUBLISHED',
+        entity_type: 'contract',
+        entity_id: BigInt(contract.id),
+        details_json: JSON.stringify({ version: contract.version, title: contract.title }),
+      },
+    });
+
+    res.json(contract);
+  } catch (err) { next(err); }
+});
+
 let _hasExtendedCols: boolean | null = null;
 async function checkExtendedCols(): Promise<boolean> {
   if (_hasExtendedCols === true) return true;
@@ -648,7 +694,7 @@ async function checkExtendedCols(): Promise<boolean> {
 }
 
 // GET /admin/ledger/summary
-router.get('/admin/ledger/summary', authenticate, requireRole('admin'), async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/ledger/summary', authenticate, requirePermission('payments.read'), async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const hasExtendedCols = await checkExtendedCols();
 
@@ -762,7 +808,7 @@ router.get('/admin/ledger/summary', authenticate, requireRole('admin'), async (_
 });
 
 // GET /admin/ledger - list all ledger entries (wallet_transactions) via raw SQL
-router.get('/admin/ledger', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/ledger', authenticate, requirePermission('payments.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = parseInt(req.query.page as string || '1', 10);
     const limit = parseInt(req.query.limit as string || '50', 10);
@@ -908,7 +954,7 @@ router.get('/admin/ledger', authenticate, requireRole('admin'), async (req: Requ
 // ─── Admin Dashboard Stats ───
 
 // GET /admin/dashboard/stats
-router.get('/admin/dashboard/stats', authenticate, requireRole('admin', 'support'), async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/dashboard/stats', authenticate, requirePermission('reports.read'), async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const [
       totalUsers,

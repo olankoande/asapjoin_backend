@@ -26,8 +26,11 @@ cp .env.example .env
 
 # 3. Générer le client Prisma depuis la DB existante
 npx prisma db pull
-npx prisma generate
+npm run db:generate
 ```
+
+`npm install` relance aussi automatiquement la gÃ©nÃ©ration Prisma via `postinstall`.
+Le script nettoie les variables Prisma qui peuvent forcer par erreur un client `no-engine`/Accelerate et provoquer l'erreur `the URL must start with the protocol prisma://`.
 
 ## Démarrage
 
@@ -55,6 +58,7 @@ Le serveur démarre sur `http://localhost:3000` par défaut.
 |---------|-------|-------------|
 | POST | `/api/v1/auth/register` | Inscription |
 | POST | `/api/v1/auth/login` | Connexion |
+| POST | `/api/v1/auth/google` | Connexion via Google Identity Services |
 | POST | `/api/v1/auth/refresh` | Rafraîchir le token |
 | POST | `/api/v1/auth/forgot-password` | Mot de passe oublié |
 | POST | `/api/v1/auth/reset-password` | Réinitialiser le mot de passe |
@@ -182,6 +186,32 @@ npm run job:payout
 ## Variables d'environnement
 
 Voir `.env.example` pour la liste complète.
+
+### Google Sign-In
+
+Pour activer `POST /api/v1/auth/google` :
+
+1. CrÃ©ez un client OAuth 2.0 Web dans Google Cloud Console.
+2. Ajoutez vos origines web autorisÃ©es, par exemple `http://localhost:5173`.
+3. Copiez le `Client ID` dans `GOOGLE_CLIENT_ID` cÃ´tÃ© backend et `VITE_GOOGLE_CLIENT_ID` cÃ´tÃ© frontend.
+4. Laissez `GOOGLE_ALLOWED_ISSUERS=https://accounts.google.com,accounts.google.com` sauf besoin particulier.
+
+Le backend vÃ©rifie cryptographiquement le Google ID token, puis contrÃ´le `aud`, `iss`, l'expiration et l'email avant d'Ã©mettre les JWT applicatifs.
+
+### StratÃ©gie de liaison des comptes
+
+- Si un utilisateur existe dÃ©jÃ  avec `google_sub`, il est connectÃ©.
+- Si aucun `google_sub` n'existe mais qu'un utilisateur local a le mÃªme email, le compte Google est liÃ© automatiquement.
+- Si un autre `google_sub` est dÃ©jÃ  liÃ© au mÃªme email, l'API renvoie `GOOGLE_AUTH_EMAIL_CONFLICT`.
+- Les comptes crÃ©Ã©s via Google n'ont pas de mot de passe local par dÃ©faut.
+
+### Test local
+
+- Appliquez la migration `database/migrations/20260321_google_auth.sql`
+- RegÃ©nÃ©rez Prisma si nÃ©cessaire avec `npx prisma generate`
+- Renseignez `GOOGLE_CLIENT_ID` et `VITE_GOOGLE_CLIENT_ID`
+- Lancez le backend puis le frontend
+- Utilisez le bouton officiel Google sur `/login` ou `/register`
 
 ## Tests
 

@@ -1,6 +1,7 @@
 import { prisma } from '../../db/prisma';
 import { Errors } from '../../utils/errors';
 import { UpdateProfileInput } from './users.schemas';
+import { getContractAcceptanceStatus } from '../contracts/contracts.service';
 
 const USER_SELECT = {
   id: true,
@@ -12,10 +13,33 @@ const USER_SELECT = {
   bio: true,
   role: true,
   email_verified: true,
+  auth_provider: true,
+  google_sub: true,
   payout_email: true,
+  terms_accepted_version: true,
+  terms_accepted_at: true,
   created_at: true,
   updated_at: true,
 };
+
+function serializeUserProfile(
+  user: any,
+  contractStatus?: {
+    currentContractVersion: string | null;
+    acceptedContractVersion: string | null;
+    contractAcceptedAt: string | null;
+    contractAcceptanceRequired: boolean;
+  },
+) {
+  return {
+    ...user,
+    id: user.id.toString(),
+    current_contract_version: contractStatus?.currentContractVersion ?? null,
+    accepted_contract_version: contractStatus?.acceptedContractVersion ?? user.terms_accepted_version ?? null,
+    contract_accepted_at: contractStatus?.contractAcceptedAt ?? user.terms_accepted_at?.toISOString() ?? null,
+    contract_acceptance_required: contractStatus?.contractAcceptanceRequired ?? false,
+  };
+}
 
 export async function getProfile(userId: string) {
   const user = await prisma.users.findUnique({
@@ -24,7 +48,8 @@ export async function getProfile(userId: string) {
   });
 
   if (!user) throw Errors.notFound('User');
-  return user;
+  const contractStatus = await getContractAcceptanceStatus(BigInt(userId));
+  return serializeUserProfile(user, contractStatus);
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput) {
@@ -44,5 +69,6 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
     select: USER_SELECT,
   });
 
-  return updated;
+  const contractStatus = await getContractAcceptanceStatus(BigInt(userId));
+  return serializeUserProfile(updated, contractStatus);
 }

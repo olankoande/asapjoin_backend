@@ -63,6 +63,12 @@ export const Errors = {
     new AppError(400, 'MISSING_PAYOUT_INFO', 'User is missing phone_number or payout_email'),
   userBanned: () =>
     new AppError(403, 'USER_BANNED', 'This account has been banned'),
+  googleAuthDisabled: () =>
+    new AppError(503, 'GOOGLE_AUTH_DISABLED', 'Google authentication is not configured'),
+  invalidGoogleToken: () =>
+    new AppError(401, 'INVALID_GOOGLE_TOKEN', 'Invalid Google token'),
+  googleAuthEmailConflict: () =>
+    new AppError(409, 'GOOGLE_AUTH_EMAIL_CONFLICT', 'Google account email cannot be linked to this user'),
   notDeliveryRecipient: () =>
     new AppError(403, 'NOT_DELIVERY_RECIPIENT', 'Only the recipient can confirm receipt'),
   deliveryNotDeliveredYet: () =>

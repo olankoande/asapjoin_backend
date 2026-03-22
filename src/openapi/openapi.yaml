@@ -58,14 +58,26 @@ components:
           type: string
         avatar_url:
           type: string
+          nullable: true
         role:
           type: string
           enum: [user, support, admin]
         is_banned:
           type: boolean
+        email_verified:
+          type: boolean
+        auth_provider:
+          type: string
+          enum: [local, google]
+        google_linked:
+          type: boolean
         payout_email:
           type: string
+          nullable: true
         created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
 
@@ -102,11 +114,33 @@ components:
         vehicle_id:
           type: string
           format: uuid
+        from_city:
+          type: string
+        to_city:
+          type: string
+        departure_city_id:
+          type: string
+          nullable: true
+        arrival_city_id:
+          type: string
+          nullable: true
+        departure_point_id:
+          type: string
+          nullable: true
+        arrival_point_id:
+          type: string
+          nullable: true
         origin_address:
           type: string
         origin_lat:
           type: number
         origin_lng:
+          type: number
+        departure_address:
+          type: string
+        departure_lat:
+          type: number
+        departure_lng:
           type: number
         destination_address:
           type: string
@@ -114,6 +148,22 @@ components:
           type: number
         destination_lng:
           type: number
+        arrival_address:
+          type: string
+        arrival_lat:
+          type: number
+        arrival_lng:
+          type: number
+        departure_label:
+          type: string
+        arrival_label:
+          type: string
+        departure_point_name:
+          type: string
+          nullable: true
+        arrival_point_name:
+          type: string
+          nullable: true
         departure_time:
           type: string
           format: date-time
@@ -137,6 +187,138 @@ components:
           enum: [draft, published, in_progress, completed, cancelled]
         notes:
           type: string
+        departure_city:
+          $ref: '#/components/schemas/City'
+        arrival_city:
+          $ref: '#/components/schemas/City'
+        departure_point:
+          $ref: '#/components/schemas/CityPoint'
+        arrival_point:
+          $ref: '#/components/schemas/CityPoint'
+
+    City:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        province:
+          type: string
+          nullable: true
+        country:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CityPoint:
+      type: object
+      properties:
+        id:
+          type: string
+        city_id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        point_type:
+          type: string
+          enum: [station, airport, university, mall, downtown, custom]
+        popularity_score:
+          type: integer
+        usage_count:
+          type: integer
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TripLocationInput:
+      type: object
+      properties:
+        point_id:
+          type: integer
+          nullable: true
+        address:
+          type: string
+        lat:
+          type: number
+          nullable: true
+        lng:
+          type: number
+          nullable: true
+
+    TripCreateInput:
+      type: object
+      required: [vehicle_id, departure_city_id, arrival_city_id, departure, arrival, departure_time, available_seats, price_per_seat]
+      properties:
+        vehicle_id:
+          type: string
+        departure_city_id:
+          type: integer
+        arrival_city_id:
+          type: integer
+        departure:
+          $ref: '#/components/schemas/TripLocationInput'
+        arrival:
+          $ref: '#/components/schemas/TripLocationInput'
+        departure_time:
+          type: string
+          format: date-time
+        available_seats:
+          type: integer
+        price_per_seat:
+          type: number
+        accepts_parcels:
+          type: boolean
+        parcel_price:
+          type: number
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    TripUpdateInput:
+      type: object
+      properties:
+        departure_city_id:
+          type: integer
+        arrival_city_id:
+          type: integer
+        departure:
+          $ref: '#/components/schemas/TripLocationInput'
+        arrival:
+          $ref: '#/components/schemas/TripLocationInput'
+        departure_time:
+          type: string
+          format: date-time
+        available_seats:
+          type: integer
+        price_per_seat:
+          type: number
+        accepts_parcels:
+          type: boolean
+        parcel_price:
+          type: number
+          nullable: true
+        notes:
+          type: string
+          nullable: true
 
     Booking:
       type: object
@@ -419,6 +601,82 @@ components:
         refreshToken:
           type: string
 
+    AuthResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    GoogleAuthRequest:
+      type: object
+      required: [credential]
+      properties:
+        credential:
+          type: string
+          description: Google ID token returned by Google Identity Services
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_system:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Permission:
+      type: object
+      properties:
+        id:
+          type: string
+        module:
+          type: string
+        action:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+          nullable: true
+        assigned:
+          type: boolean
+
+    UserRole:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            first_name:
+              type: string
+            last_name:
+              type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+
     # ─── Cancellation & Refund Schemas ───
 
     CancelPreview:
@@ -655,9 +913,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/User'
-                  - $ref: '#/components/schemas/TokenPair'
+                $ref: '#/components/schemas/AuthResponse'
         '409':
           description: Email already exists
           content:
@@ -685,8 +941,68 @@ paths:
       responses:
         '200':
           description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/google:
+    post:
+      tags: [Auth]
+      summary: Authenticate with Google Identity Services
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleAuthRequest'
+      responses:
+        '200':
+          description: Google login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid Google token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidGoogleToken:
+                  value:
+                    code: INVALID_GOOGLE_TOKEN
+                    message: Invalid Google token
+        '409':
+          description: Existing account cannot be linked automatically
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                googleEmailConflict:
+                  value:
+                    code: GOOGLE_AUTH_EMAIL_CONFLICT
+                    message: Google account email cannot be linked to this user
+        '503':
+          description: Google auth is disabled on the backend
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                googleAuthDisabled:
+                  value:
+                    code: GOOGLE_AUTH_DISABLED
+                    message: Google authentication is not configured
 
   /api/v1/auth/refresh:
     post:
@@ -784,6 +1100,203 @@ paths:
         '200':
           description: Updated profile
 
+  /api/v1/me/permissions:
+    get:
+      tags: [RBAC]
+      summary: Get effective permissions for the current user
+      responses:
+        '200':
+          description: Current permissions
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missing_permission:
+                  value:
+                    code: MISSING_PERMISSION
+                    message: Missing required permission(s)
+
+  /api/v1/me/roles:
+    get:
+      tags: [RBAC]
+      summary: Get effective roles for the current user
+      responses:
+        '200':
+          description: Current roles
+
+  /api/v1/admin/permissions:
+    get:
+      tags: [RBAC]
+      summary: List permissions
+      responses:
+        '200':
+          description: Permission list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+
+  /api/v1/admin/roles:
+    get:
+      tags: [RBAC]
+      summary: List roles
+      responses:
+        '200':
+          description: Role list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+    post:
+      tags: [RBAC]
+      summary: Create a role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Role created
+        '403':
+          description: Forbidden
+        '409':
+          description: Role code already exists
+
+  /api/v1/admin/roles/{id}:
+    get:
+      tags: [RBAC]
+      summary: Get role detail
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Role detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+    patch:
+      tags: [RBAC]
+      summary: Update a role
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Role updated
+        '403':
+          description: Role protected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                protected:
+                  value:
+                    code: ROLE_PROTECTED
+                    message: System role is protected
+    delete:
+      tags: [RBAC]
+      summary: Delete a role
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Role deleted
+        '403':
+          description: Role protected
+
+  /api/v1/admin/roles/{id}/permissions:
+    get:
+      tags: [RBAC]
+      summary: List permissions assigned to a role
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Role permissions
+    put:
+      tags: [RBAC]
+      summary: Replace permissions assigned to a role
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissionIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Role permissions updated
+        '403':
+          description: Role protected
+
+  /api/v1/admin/users/{id}/roles:
+    get:
+      tags: [RBAC]
+      summary: List roles assigned to a user
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: User roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRole'
+    put:
+      tags: [RBAC]
+      summary: Replace roles assigned to a user
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roleIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: User roles updated
+        '400':
+          description: Invalid role assignment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_assignment:
+                  value:
+                    code: INVALID_ROLE_ASSIGNMENT
+                    message: One or more roles do not exist
+
   # ─── Vehicles ───
   /api/v1/vehicles:
     get:
@@ -839,6 +1352,115 @@ paths:
           description: Vehicle deleted
 
   # ─── Trips ───
+  /api/v1/cities:
+    get:
+      tags: [Locations]
+      summary: List active cities
+      responses:
+        '200':
+          description: Cities list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+
+  /api/v1/cities/search:
+    get:
+      tags: [Locations]
+      summary: Search active cities by name
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matching cities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+
+  /api/v1/cities/{cityId}/points:
+    get:
+      tags: [Locations]
+      summary: List active frequent points for a city
+      parameters:
+        - name: cityId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [station, airport, university, mall, downtown, custom]
+      responses:
+        '200':
+          description: Frequent points sorted by popularity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CityPoint'
+    post:
+      tags: [Locations]
+      summary: Create a frequent point for a city
+      parameters:
+        - name: cityId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityPoint'
+      responses:
+        '201':
+          description: Frequent point created
+
+  /api/v1/city-points/{id}:
+    patch:
+      tags: [Locations]
+      summary: Update a frequent point
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityPoint'
+      responses:
+        '200':
+          description: Frequent point updated
+    delete:
+      tags: [Locations]
+      summary: Deactivate a frequent point
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Frequent point deactivated
+
   /api/v1/trips:
     post:
       tags: [Trips]
@@ -848,38 +1470,37 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [vehicle_id, origin_address, origin_lat, origin_lng, destination_address, destination_lat, destination_lng, departure_time, available_seats, price_per_seat]
-              properties:
-                vehicle_id:
-                  type: string
-                  format: uuid
-                origin_address:
-                  type: string
-                origin_lat:
-                  type: number
-                origin_lng:
-                  type: number
-                destination_address:
-                  type: string
-                destination_lat:
-                  type: number
-                destination_lng:
-                  type: number
-                departure_time:
-                  type: string
-                  format: date-time
-                available_seats:
-                  type: integer
-                price_per_seat:
-                  type: number
-                accepts_parcels:
-                  type: boolean
-                parcel_price:
-                  type: number
+              $ref: '#/components/schemas/TripCreateInput'
       responses:
         '201':
           description: Trip created
+        '400':
+          description: Invalid city, point or matching locations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_departure_city:
+                  value:
+                    code: INVALID_DEPARTURE_CITY
+                    message: Departure city is invalid
+                invalid_arrival_city:
+                  value:
+                    code: INVALID_ARRIVAL_CITY
+                    message: Arrival city is invalid
+                invalid_departure_point:
+                  value:
+                    code: INVALID_DEPARTURE_POINT
+                    message: Departure point does not belong to the selected city
+                invalid_arrival_point:
+                  value:
+                    code: INVALID_ARRIVAL_POINT
+                    message: Arrival point does not belong to the selected city
+                same_locations:
+                  value:
+                    code: DEPARTURE_AND_ARRIVAL_CANNOT_MATCH
+                    message: Departure and arrival cannot match
 
   /api/v1/trips/search:
     get:
@@ -943,6 +1564,12 @@ paths:
       summary: Update a draft trip
       parameters:
         - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripUpdateInput'
       responses:
         '200':
           description: Trip updated

@@ -18,6 +18,7 @@ import { recordPayout, recordPayoutReversal, ensureWallet } from '../fees/ledger
  */
 export async function getEligible(asOfDate?: string) {
   const minAmountCents = Math.round((env.MIN_PAYOUT_AMOUNT || 5) * 100);
+  const effectiveDate = asOfDate ? new Date(asOfDate) : null;
 
   // Use raw SQL — available_cents may not exist yet, fallback to available_balance * 100
   const rows = await prisma.$queryRaw<Array<{
@@ -58,6 +59,7 @@ export async function getEligible(asOfDate?: string) {
       ...(!r.payout_email ? ['payout_email'] : []),
       ...(r.is_banned ? ['account_banned'] : []),
     ],
+    as_of_date: effectiveDate?.toISOString().slice(0, 10) ?? null,
   }));
 }
 
@@ -80,11 +82,12 @@ export async function createBatch(
   }
 
   const provider = input.provider || 'manual';
+  const scheduledFor = input.scheduled_for || new Date().toISOString().slice(0, 10);
 
   // Create batch
   const batch = await prisma.payout_batches.create({
     data: {
-      scheduled_for_date: new Date(input.scheduled_for),
+      scheduled_for_date: new Date(scheduledFor),
       status: 'draft',
       created_by_admin_id: BigInt(adminId),
     },
@@ -155,11 +158,60 @@ export async function getBatch(batchId: string) {
 /**
  * List all payout batches.
  */
-export async function listBatches() {
+export async function listBatches(filters?: { scheduled_for?: string; status?: string }) {
   return prisma.payout_batches.findMany({
-    include: { payouts: true },
-    orderBy: { created_at: 'desc' },
+    where: {
+      ...(filters?.scheduled_for
+        ? {
+            scheduled_for_date: {
+              gte: new Date(filters.scheduled_for),
+              lt: new Date(new Date(filters.scheduled_for).getTime() + 24 * 60 * 60 * 1000),
+            },
+          }
+        : {}),
+      ...(filters?.status ? { status: filters.status as any } : {}),
+    },
+    include: {
+      payouts: {
+        include: {
+          users: { select: { id: true, first_name: true, last_name: true, email: true, payout_email: true, payout_phone: true } },
+        },
+      },
+    },
+    orderBy: [{ scheduled_for_date: 'desc' }, { created_at: 'desc' }],
     take: 50,
+  });
+}
+
+export async function listPayouts(filters?: { scheduled_for?: string; status?: string }) {
+  return prisma.payouts.findMany({
+    where: {
+      ...(filters?.status ? { status: filters.status as any } : {}),
+      ...(filters?.scheduled_for
+        ? {
+            batch: {
+              scheduled_for_date: {
+                gte: new Date(filters.scheduled_for),
+                lt: new Date(new Date(filters.scheduled_for).getTime() + 24 * 60 * 60 * 1000),
+              },
+            },
+          }
+        : {}),
+    },
+    include: {
+      batch: true,
+      users: {
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          payout_email: true,
+          payout_phone: true,
+        },
+      },
+    },
+    orderBy: [{ created_at: 'desc' }],
   });
 }
 

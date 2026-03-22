@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, checkNotBanned } from '../../middlewares/auth';
-import { requireRole } from '../../middlewares/rbac';
+import { requirePermission } from '../../middlewares/rbac';
 import * as disputesService from './disputes.service';
 
 const router = Router();
@@ -10,7 +10,7 @@ const router = Router();
 /**
  * GET /api/v1/disputes/admin — List disputes (admin)
  */
-router.get('/admin', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin', authenticate, requirePermission('disputes.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const status = req.query.status as string | undefined;
     const disputes = await disputesService.listDisputes(status);
@@ -21,7 +21,7 @@ router.get('/admin', authenticate, requireRole('admin', 'support'), async (req: 
 /**
  * GET /api/v1/disputes/admin/:id — Get dispute detail (admin — with replies)
  */
-router.get('/admin/:id', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/admin/:id', authenticate, requirePermission('disputes.read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dispute = await disputesService.getDispute(String(req.params.id));
     res.json(dispute);
@@ -31,7 +31,7 @@ router.get('/admin/:id', authenticate, requireRole('admin', 'support'), async (r
 /**
  * PATCH /api/v1/disputes/admin/:id/status — Update dispute status (admin)
  */
-router.patch('/admin/:id/status', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/admin/:id/status', authenticate, requirePermission('disputes.update'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.body;
     if (!status) {
@@ -45,7 +45,7 @@ router.patch('/admin/:id/status', authenticate, requireRole('admin', 'support'),
 /**
  * POST /api/v1/disputes/admin/:id/resolve — Resolve dispute (admin)
  */
-router.post('/admin/:id/resolve', authenticate, requireRole('admin'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/admin/:id/resolve', authenticate, requirePermission('disputes.resolve'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await disputesService.resolveDispute(req.user!.userId, String(req.params.id), req.body);
     res.json(result);
@@ -55,7 +55,7 @@ router.post('/admin/:id/resolve', authenticate, requireRole('admin'), async (req
 /**
  * POST /api/v1/disputes/admin/:id/reply — Admin reply to a dispute
  */
-router.post('/admin/:id/reply', authenticate, requireRole('admin', 'support'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/admin/:id/reply', authenticate, requirePermission('disputes.update'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { message } = req.body;
     if (!message || !message.trim()) {

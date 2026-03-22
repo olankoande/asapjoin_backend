@@ -17,7 +17,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, checkNotBanned } from '../../middlewares/auth';
-import { requireRole } from '../../middlewares/rbac';
+import { requirePermission } from '../../middlewares/rbac';
 import {
   previewBookingCancellation,
   previewDeliveryCancellation,
@@ -36,6 +36,21 @@ import { prisma } from '../../db/prisma';
 import { Errors } from '../../utils/errors';
 
 const router = Router();
+
+let cancellationRequestsTableAvailableCache: boolean | null = null;
+
+async function hasCancellationRequestsTable(): Promise<boolean> {
+  if (cancellationRequestsTableAvailableCache == null) {
+    const rows = await prisma.$queryRaw<Array<{ cnt: bigint | number }>>`
+      SELECT COUNT(*) as cnt
+      FROM information_schema.tables
+      WHERE table_schema = DATABASE() AND table_name = 'cancellation_requests'
+    `;
+    cancellationRequestsTableAvailableCache = Number(rows[0]?.cnt || 0) > 0;
+  }
+
+  return cancellationRequestsTableAvailableCache;
+}
 
 // ─── Booking Cancel Preview ───
 router.get(
@@ -119,7 +134,7 @@ router.post(
 router.get(
   '/admin/refund-policies',
   authenticate,
-  requireRole('admin', 'support'),
+  requirePermission('refunds.read'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const filters: any = {};
@@ -146,7 +161,7 @@ router.get(
 router.post(
   '/admin/refund-policies',
   authenticate,
-  requireRole('admin'),
+  requirePermission('refunds.create'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const {
@@ -198,7 +213,7 @@ router.post(
 router.patch(
   '/admin/refund-policies/:id',
   authenticate,
-  requireRole('admin'),
+  requirePermission('refunds.update'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const policyId = BigInt(req.params.id as string);
@@ -226,7 +241,7 @@ router.patch(
 router.post(
   '/admin/refund-policies/:id/activate',
   authenticate,
-  requireRole('admin'),
+  requirePermission('refunds.update'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const policyId = BigInt(req.params.id as string);
@@ -252,7 +267,7 @@ router.post(
 router.post(
   '/admin/refund-policies/:id/deactivate',
   authenticate,
-  requireRole('admin'),
+  requirePermission('refunds.update'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const policyId = BigInt(req.params.id as string);
@@ -278,7 +293,7 @@ router.post(
 router.post(
   '/admin/refunds/override',
   authenticate,
-  requireRole('admin'),
+  requirePermission('refunds.approve'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { resource_type, resource_id, refund_amount_cents, reason, override_policy } = req.body;
@@ -310,9 +325,13 @@ router.post(
 router.get(
   '/admin/cancellation-requests',
   authenticate,
-  requireRole('admin', 'support'),
+  requirePermission('refunds.read'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!(await hasCancellationRequestsTable())) {
+        return res.json([]);
+      }
+
       const { status, resource_type } = req.query;
       let query = 'SELECT * FROM cancellation_requests WHERE 1=1';
       const params: any[] = [];

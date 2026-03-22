@@ -16,6 +16,9 @@ declare global {
         userId: string;
         role: string;
         email: string;
+        roleCodes?: string[];
+        permissionCodes?: string[];
+        isSuperAdmin?: boolean;
       };
     }
   }
