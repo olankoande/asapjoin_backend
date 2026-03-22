@@ -5,6 +5,8 @@ WORKDIR /usr/src/app
 
 # Copier les fichiers de dépendances et les installer
 COPY package*.json ./
+COPY scripts ./scripts
+COPY prisma ./prisma
 RUN npm install
 
 # Copier le reste du code source
